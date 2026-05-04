@@ -23,6 +23,12 @@ import (
 	"github.com/coder/coder/v2/testutil"
 )
 
+func sortTokenInfosByWorkspaceID(s []agentfake.TokenInfo) {
+	sort.Slice(s, func(i, j int) bool {
+		return s[i].WorkspaceID.String() < s[j].WorkspaceID.String()
+	})
+}
+
 // Asserts the TokenInfo shape (workspace IDs, agent names, tokens) returned by the enumeration loop.
 func Test_Manager_EnumerateExternalAgents_returnsAllTokens(t *testing.T) {
 	t.Parallel()
@@ -185,11 +191,7 @@ func Test_Manager_EnumerateExternalAgents_invalidTokenIsFatal(t *testing.T) {
 		"expected error to be classified as fatal so the harness exits and Kubernetes can restart it; got: %v", err)
 }
 
-func sortTokenInfosByWorkspaceID(s []agentfake.TokenInfo) {
-	sort.Slice(s, func(i, j int) bool {
-		return s[i].WorkspaceID.String() < s[j].WorkspaceID.String()
-	})
-}
+
 
 // buildExternalAgentWorkspace creates one workspace with a coder_external_agent resource, an agent, and
 // HasExternalAgent=true on the latest build. If templateID is uuid.Nil, dbfake mints a fresh template (and the caller
