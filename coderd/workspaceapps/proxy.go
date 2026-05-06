@@ -110,8 +110,9 @@ type ServerOptions struct {
 	DisablePathApps bool
 	CookiesConfig   codersdk.HTTPCookieConfig
 
-	AgentProvider  AgentProvider
-	StatsCollector *StatsCollector
+	AgentProvider    AgentProvider
+	StatsCollector   *StatsCollector
+	WebsocketMetrics *httpapi.WebsocketMetrics
 }
 
 // Server serves workspace apps endpoints, including:
@@ -765,7 +766,7 @@ func (s *Server) workspaceAgentPTY(rw http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	go httpapi.HeartbeatClose(ctx, s.Logger, cancel, conn)
+	go httpapi.HeartbeatClose(ctx, s.Logger, s.ServerOptions.WebsocketMetrics, cancel, conn)
 
 	ctx, wsNetConn := WebsocketNetConn(ctx, conn, websocket.MessageBinary)
 	defer wsNetConn.Close() // Also closes conn.

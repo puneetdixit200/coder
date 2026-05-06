@@ -17,11 +17,11 @@ const HeartbeatInterval time.Duration = 15 * time.Second
 
 // HeartbeatClose loops to ping a WebSocket to keep it alive.
 // It calls `exit` on ping failure.
-func HeartbeatClose(ctx context.Context, logger slog.Logger, exit func(), conn *websocket.Conn) {
-	heartbeatCloseWith(ctx, logger, exit, conn, quartz.NewReal(), HeartbeatInterval)
+func HeartbeatClose(ctx context.Context, logger slog.Logger, metrics *WebsocketMetrics, exit func(), conn *websocket.Conn) {
+	heartbeatCloseWith(ctx, logger, metrics.Heartbeat, exit, conn, quartz.NewReal(), HeartbeatInterval)
 }
 
-func heartbeatCloseWith(ctx context.Context, logger slog.Logger, exit func(), conn *websocket.Conn, clk quartz.Clock, interval time.Duration) {
+func heartbeatCloseWith(ctx context.Context, logger slog.Logger, countFn func(context.Context), exit func(), conn *websocket.Conn, clk quartz.Clock, interval time.Duration) {
 	ticker := clk.NewTicker(interval, "HeartbeatClose")
 	defer ticker.Stop()
 
@@ -53,6 +53,9 @@ func heartbeatCloseWith(ctx context.Context, logger slog.Logger, exit func(), co
 			_ = conn.Close(websocket.StatusGoingAway, "Ping failed")
 			exit()
 			return
+		}
+		if countFn != nil {
+			countFn(ctx)
 		}
 	}
 }

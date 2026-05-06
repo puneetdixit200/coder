@@ -782,7 +782,7 @@ func (api *API) watchContainers(rw http.ResponseWriter, r *http.Request) {
 	ctx, wsNetConn := codersdk.WebsocketNetConn(ctx, conn, websocket.MessageText)
 	defer wsNetConn.Close()
 
-	go httpapi.HeartbeatClose(ctx, api.logger, cancel, conn)
+	go httpapi.HeartbeatClose(ctx, api.logger, nil, cancel, conn)
 
 	updateCh := make(chan struct{}, 1)
 

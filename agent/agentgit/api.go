@@ -83,7 +83,7 @@ func (a *API) handleWatch(rw http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	go httpapi.HeartbeatClose(ctx, logger, cancel, conn)
+	go httpapi.HeartbeatClose(ctx, a.logger, nil, cancel, conn)
 
 	handler := NewHandler(logger, a.opts...)
 

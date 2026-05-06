@@ -493,14 +493,15 @@ func jobIsComplete(logger slog.Logger, job database.ProvisionerJob) bool {
 }
 
 type logFollower struct {
-	ctx    context.Context
-	logger slog.Logger
-	db     database.Store
-	pubsub pubsub.Pubsub
-	r      *http.Request
-	rw     http.ResponseWriter
-	conn   *websocket.Conn
-	enc    *wsjson.Encoder[codersdk.ProvisionerJobLog]
+	ctx              context.Context
+	logger           slog.Logger
+	db               database.Store
+	pubsub           pubsub.Pubsub
+	websocketMetrics *httpapi.WebsocketMetrics
+	r                *http.Request
+	rw               http.ResponseWriter
+	conn             *websocket.Conn
+	enc              *wsjson.Encoder[codersdk.ProvisionerJobLog]
 
 	jobID         uuid.UUID
 	after         int64
@@ -579,7 +580,7 @@ func (f *logFollower) follow() {
 		return
 	}
 	defer f.conn.Close(websocket.StatusNormalClosure, "done")
-	go httpapi.HeartbeatClose(f.ctx, f.logger, cancel, f.conn)
+	go httpapi.HeartbeatClose(f.ctx, f.logger, f.websocketMetrics, cancel, f.conn)
 	f.enc = wsjson.NewEncoder[codersdk.ProvisionerJobLog](f.conn, websocket.MessageText)
 
 	// query for logs once right away, so we can get historical data from before

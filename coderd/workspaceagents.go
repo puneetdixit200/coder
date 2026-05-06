@@ -501,7 +501,7 @@ func (api *API) workspaceAgentLogs(rw http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	go httpapi.HeartbeatClose(ctx, api.Logger, cancel, conn)
+	go httpapi.HeartbeatClose(ctx, api.Logger, api.websocketMetrics, cancel, conn)
 
 	encoder := wsjson.NewEncoder[[]codersdk.WorkspaceAgentLog](conn, websocket.MessageText)
 	defer encoder.Close(websocket.StatusNormalClosure)
@@ -871,7 +871,7 @@ func (api *API) watchWorkspaceAgentContainers(rw http.ResponseWriter, r *http.Re
 	ctx, wsNetConn := codersdk.WebsocketNetConn(ctx, conn, websocket.MessageText)
 	defer wsNetConn.Close()
 
-	go httpapi.HeartbeatClose(ctx, logger, cancel, conn)
+	go httpapi.HeartbeatClose(ctx, logger, api.websocketMetrics, cancel, conn)
 
 	encoder := json.NewEncoder(wsNetConn)
 
@@ -1368,7 +1368,7 @@ func (api *API) workspaceAgentClientCoordinate(rw http.ResponseWriter, r *http.R
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	go httpapi.HeartbeatClose(ctx, api.Logger, cancel, conn)
+	go httpapi.HeartbeatClose(ctx, api.Logger, api.websocketMetrics, cancel, conn)
 
 	defer conn.Close(websocket.StatusNormalClosure, "")
 	err = api.TailnetClientService.ServeClient(ctx, version, wsNetConn, tailnet.StreamID{
@@ -1665,7 +1665,7 @@ func (api *API) watchWorkspaceAgentMetadataSSE(rw http.ResponseWriter, r *http.R
 // @Router /api/v2/workspaceagents/{workspaceagent}/watch-metadata-ws [get]
 // @x-apidocgen {"skip": true}
 func (api *API) watchWorkspaceAgentMetadataWS(rw http.ResponseWriter, r *http.Request) {
-	api.watchWorkspaceAgentMetadata(rw, r, httpapi.OneWayWebSocketEventSender(api.Logger))
+	api.watchWorkspaceAgentMetadata(rw, r, httpapi.OneWayWebSocketEventSender(api.Logger, api.websocketMetrics))
 }
 
 func (api *API) watchWorkspaceAgentMetadata(
@@ -2296,7 +2296,7 @@ func (api *API) tailnetRPCConn(rw http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	go httpapi.HeartbeatClose(ctx, api.Logger, cancel, conn)
+	go httpapi.HeartbeatClose(ctx, api.Logger, api.websocketMetrics, cancel, conn)
 	err = api.TailnetClientService.ServeClient(ctx, version, wsNetConn, tailnet.StreamID{
 		Name: "client",
 		ID:   peerID,
