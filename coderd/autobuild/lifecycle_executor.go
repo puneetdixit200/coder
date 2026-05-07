@@ -25,6 +25,7 @@ import (
 	"github.com/coder/coder/v2/coderd/database/dbtime"
 	"github.com/coder/coder/v2/coderd/database/provisionerjobs"
 	"github.com/coder/coder/v2/coderd/database/pubsub"
+	"github.com/coder/coder/v2/coderd/dynamicparameters"
 	"github.com/coder/coder/v2/coderd/files"
 	"github.com/coder/coder/v2/coderd/notifications"
 	"github.com/coder/coder/v2/coderd/pproflabel"
@@ -165,6 +166,67 @@ func (e *Executor) hasValidProvisioner(ctx context.Context, tx database.Store, t
 	}
 	logger.Debug(ctx, "hasValidProvisioner: no active provisioners found")
 	return false, nil
+}
+
+// shouldSkipAutoUpdateForSecrets reports whether autoupdate should be skipped
+// because the active template version declares coder_secret requirements that
+// the workspace owner does not satisfy.
+//
+// Non-authoritative results (template version not yet ready, transient
+// renderer error) are treated as "do not skip". This mirrors the
+// resolve-autostart handler so the dashboard banner and the executor's
+// decision stay consistent, and a transient failure cannot silently disable
+// auto-updates.
+func (e *Executor) shouldSkipAutoUpdateForSecrets(
+	tx database.Store,
+	ws database.Workspace,
+	activeTemplateVersion database.TemplateVersion,
+	latestBuildID uuid.UUID,
+	log slog.Logger,
+) bool {
+	// Use tx (not e.db) to honor AGENTS.md's InTx rule and avoid pool
+	// starvation while we hold a transaction.
+	lastParams, err := tx.GetWorkspaceBuildParameters(e.ctx, latestBuildID)
+	if err != nil {
+		log.Warn(e.ctx, "failed to load last build parameters for secret evaluation",
+			slog.F("workspace_id", ws.ID),
+			slog.F("latest_build_id", latestBuildID),
+			slog.Error(err),
+		)
+		return false
+	}
+
+	mismatch, err := dynamicparameters.EvaluateSecretMismatch(
+		e.ctx,
+		e.log.Named("dynamicparameters"),
+		tx, e.fileCache, activeTemplateVersion, ws.OwnerID, lastParams,
+	)
+	switch {
+	case err == nil:
+		if mismatch {
+			log.Info(e.ctx, "skipping autostart auto-update: workspace owner is missing required coder_secret values",
+				slog.F("workspace_id", ws.ID),
+				slog.F("active_template_version_id", activeTemplateVersion.ID),
+			)
+			return true
+		}
+		return false
+	case xerrors.Is(err, dynamicparameters.ErrTemplateVersionNotReady):
+		// The active version's provisioner job hasn't completed yet.
+		// Treat as "unknown" and let the build proceed; the wsbuilder
+		// will surface the not-ready error itself.
+		return false
+	default:
+		// Renderer infrastructure error. Log and let the build proceed;
+		// if the underlying problem persists, the build itself will fail
+		// and the existing notification path takes over.
+		log.Warn(e.ctx, "failed to evaluate secret requirements for auto-update",
+			slog.F("workspace_id", ws.ID),
+			slog.F("active_template_version_id", activeTemplateVersion.ID),
+			slog.Error(err),
+		)
+		return false
+	}
 }
 
 func (e *Executor) runOnce(t time.Time) Stats {
@@ -348,6 +410,17 @@ func (e *Executor) runOnce(t time.Time) Stats {
 						log.Debug(e.ctx, "auto building workspace", slog.F("transition", nextTransition))
 						if nextTransition == database.WorkspaceTransitionStart &&
 							useActiveVersion(accessControl, ws) {
+							// Skip the auto-update silently when the active template
+							// version declares coder_secret requirements that the
+							// workspace owner does not satisfy. The dashboard surfaces
+							// the same mismatch via resolve-autostart so the user knows
+							// they need to update manually after creating the secrets.
+							if latestBuild.TemplateVersionID != tmpl.ActiveVersionID {
+								if e.shouldSkipAutoUpdateForSecrets(tx, ws, activeTemplateVersion, latestBuild.ID, log) {
+									return nil
+								}
+							}
+
 							log.Debug(e.ctx, "autostarting with active version")
 							builder = builder.ActiveVersion()
 

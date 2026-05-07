@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/coder/coder/v2/codersdk"
 	"github.com/coder/coder/v2/codersdk/agentsdk"
 	"github.com/coder/coder/v2/provisioner/echo"
+	provProto "github.com/coder/coder/v2/provisionerd/proto"
 	"github.com/coder/coder/v2/provisionersdk/proto"
 	"github.com/coder/coder/v2/testutil"
 	"github.com/coder/quartz"
@@ -308,6 +310,138 @@ func TestExecutorAutostartTemplateUpdated(t *testing.T) {
 			} else {
 				sent := enqueuer.Sent(notificationstest.WithTemplateID(notifications.TemplateWorkspaceAutoUpdated))
 				require.Empty(t, sent)
+			}
+		})
+	}
+}
+
+func TestExecutorAutostartSecretRequirements(t *testing.T) {
+	t.Parallel()
+
+	// PLAT-81: when the active template version declares a coder_secret
+	// requirement that the workspace owner does not satisfy, the lifecycle
+	// executor must skip the auto-update silently. Once the owner creates a
+	// matching secret, the next tick should run the auto-update and emit the
+	// usual TemplateWorkspaceAutoUpdated notification.
+
+	noRequirementsTF := `terraform {
+  required_providers {
+    coder = {
+      source = "coder/coder"
+    }
+  }
+}
+`
+
+	testCases := []struct {
+		name               string
+		createSecretBefore bool
+		expectUpdate       bool
+	}{
+		{
+			name:               "MissingSecretSkipsAutoUpdate",
+			createSecretBefore: false,
+			expectUpdate:       false,
+		},
+		{
+			name:               "SatisfiedSecretRunsAutoUpdate",
+			createSecretBefore: true,
+			expectUpdate:       true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var (
+				sched      = mustSchedule(t, "CRON_TZ=UTC 0 * * * *")
+				ctx        = testutil.Context(t, testutil.WaitLong)
+				tickCh     = make(chan time.Time)
+				statsCh    = make(chan autobuild.Stats)
+				logger     = slogtest.Make(t, &slogtest.Options{IgnoreErrors: true}).Leveled(slog.LevelDebug)
+				enqueuer   = notificationstest.FakeEnqueuer{}
+				client, db = coderdtest.NewWithDatabase(t, &coderdtest.Options{
+					AutobuildTicker:          tickCh,
+					IncludeProvisionerDaemon: true,
+					AutobuildStats:           statsCh,
+					Logger:                   &logger,
+					NotificationsEnqueuer:    &enqueuer,
+					ProvisionerDaemonVersion: provProto.CurrentVersion.String(),
+				})
+			)
+
+			owner := coderdtest.CreateFirstUser(t, client)
+
+			// v1 is a minimal terraform template with no requirements; it
+			// must be a dynamic-parameters template so the workspace can be
+			// updated to v2 (which uses coder_secret).
+			tpl, _ := coderdtest.DynamicParameterTemplate(t, client, owner.OrganizationID,
+				coderdtest.DynamicParameterTemplateParams{
+					MainTF: noRequirementsTF,
+				})
+
+			workspace := coderdtest.CreateWorkspace(t, client, tpl.ID,
+				func(req *codersdk.CreateWorkspaceRequest) {
+					req.AutostartSchedule = ptr.Ref(sched.String())
+					req.AutomaticUpdates = codersdk.AutomaticUpdatesAlways
+				})
+			coderdtest.AwaitWorkspaceBuildJobCompleted(t, client, workspace.LatestBuild.ID)
+			workspace = coderdtest.MustWorkspace(t, client, workspace.ID)
+
+			// Stop the workspace so autobuild's start-on-schedule path runs.
+			workspace = coderdtest.MustTransitionWorkspace(t, client, workspace.ID,
+				codersdk.WorkspaceTransitionStart, codersdk.WorkspaceTransitionStop)
+
+			// Optionally satisfy the requirement before the auto-update tick.
+			if tc.createSecretBefore {
+				_, err := client.CreateUserSecret(ctx, codersdk.Me, codersdk.CreateUserSecretRequest{
+					Name:    "github-token",
+					Value:   "ghp_test",
+					EnvName: "GITHUB_TOKEN",
+				})
+				require.NoError(t, err)
+			}
+
+			// Push v2 with a coder_secret requirement and make it active.
+			secretRequiredTF, err := os.ReadFile("../testdata/parameters/secret_required/main.tf")
+			require.NoError(t, err)
+			_, newVersion := coderdtest.DynamicParameterTemplate(t, client, owner.OrganizationID,
+				coderdtest.DynamicParameterTemplateParams{
+					MainTF:     string(secretRequiredTF),
+					TemplateID: tpl.ID,
+				})
+
+			p, err := coderdtest.GetProvisionerForTags(db, time.Now(), workspace.OrganizationID, nil)
+			require.NoError(t, err)
+
+			go func() {
+				tickTime := sched.Next(workspace.LatestBuild.CreatedAt)
+				coderdtest.UpdateProvisionerLastSeenAt(t, db, p.ID, tickTime)
+				tickCh <- tickTime
+				close(tickCh)
+			}()
+
+			stats := testutil.TryReceive(ctx, t, statsCh)
+			// Whether or not the auto-update runs, the executor should not
+			// surface an error to the stats channel.
+			assert.Len(t, stats.Errors, 0)
+
+			notif := enqueuer.Sent(notificationstest.WithTemplateID(notifications.TemplateWorkspaceAutoUpdated))
+			ws := coderdtest.MustWorkspace(t, client, workspace.ID)
+
+			if tc.expectUpdate {
+				require.Len(t, stats.Transitions, 1)
+				assert.Equal(t, database.WorkspaceTransitionStart, stats.Transitions[workspace.ID])
+				assert.Equal(t, newVersion.ID, ws.LatestBuild.TemplateVersionID,
+					"expected workspace build to use the updated template version")
+				require.Len(t, notif, 1, "expected auto-update notification")
+			} else {
+				assert.Empty(t, stats.Transitions,
+					"expected lifecycle executor to skip the auto-update")
+				assert.Equal(t, workspace.LatestBuild.TemplateVersionID, ws.LatestBuild.TemplateVersionID,
+					"expected workspace build to remain on the old template version")
+				require.Empty(t, notif, "did not expect auto-update notification")
 			}
 		})
 	}
