@@ -68,6 +68,7 @@ type API struct {
 	watcher                     watcher.Watcher
 	fs                          afero.Fs
 	execer                      agentexec.Execer
+	heartbeatCloser             *httpapi.HeartbeatCloser
 	commandEnv                  CommandEnv
 	ccli                        ContainerCLI
 	containerLabelIncludeFilter map[string]string // Labels to filter containers by.
@@ -342,6 +343,7 @@ func NewAPI(logger slog.Logger, options ...Option) *API {
 		scriptLogger:                func(uuid.UUID) ScriptLogger { return noopScriptLogger{} },
 		injectedSubAgentProcs:       make(map[string]subAgentProcess),
 		usingWorkspaceFolderName:    make(map[string]bool),
+		heartbeatCloser:             httpapi.NewHeartbeatCloser(),
 	}
 	// The ctx and logger must be set before applying options to avoid
 	// nil pointer dereference.
@@ -782,7 +784,7 @@ func (api *API) watchContainers(rw http.ResponseWriter, r *http.Request) {
 	ctx, wsNetConn := codersdk.WebsocketNetConn(ctx, conn, websocket.MessageText)
 	defer wsNetConn.Close()
 
-	go httpapi.HeartbeatClose(ctx, api.logger, nil, cancel, conn)
+	go api.heartbeatCloser.HeartbeatClose(ctx, api.logger, cancel, conn)
 
 	updateCh := make(chan struct{}, 1)
 

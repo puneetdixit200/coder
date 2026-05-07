@@ -133,6 +133,7 @@ type Server struct {
 	Logger             slog.Logger
 	TracerProvider     trace.TracerProvider
 	PrometheusRegistry *prometheus.Registry
+	HeartbeatCloser    *httpapi.HeartbeatCloser
 
 	// SDKClient is a client to the primary coderd instance authenticated with
 	// the moon's token.
@@ -211,6 +212,8 @@ func New(ctx context.Context, opts *Options) (*Server, error) {
 			expvar.Publish("derp", derpServer.ExpVar())
 		}
 	})
+
+	heartbeatCloser := httpapi.NewHeartbeatCloser()
 	if opts.PrometheusRegistry != nil {
 		opts.PrometheusRegistry.MustRegister(derpmetrics.NewDERPExpvarCollector(derpServer))
 	}
@@ -247,6 +250,7 @@ func New(ctx context.Context, opts *Options) (*Server, error) {
 		Logger:                   opts.Logger.Named("net.workspace-proxy"),
 		TracerProvider:           opts.Tracing,
 		PrometheusRegistry:       opts.PrometheusRegistry,
+		HeartbeatCloser:          heartbeatCloser,
 		SDKClient:                client,
 		derpMesh:                 derpmesh.New(opts.Logger.Named("net.derpmesh"), derpServer, meshTLSConfig),
 		derpMeshTLSConfig:        meshTLSConfig,
@@ -332,6 +336,7 @@ func New(ctx context.Context, opts *Options) (*Server, error) {
 		AgentProvider:            agentProvider,
 		StatsCollector:           workspaceapps.NewStatsCollector(opts.StatsCollectorOptions),
 		APIKeyEncryptionKeycache: encryptionCache,
+		HeartbeatCloser:          heartbeatCloser,
 	})
 
 	derpHandler := derphttp.Handler(derpServer)

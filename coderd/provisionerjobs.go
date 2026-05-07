@@ -202,7 +202,7 @@ func (api *API) provisionerJobLogs(rw http.ResponseWriter, r *http.Request, job 
 		return
 	}
 
-	follower := newLogFollower(ctx, logger, api.Database, api.Pubsub, rw, r, job, after)
+	follower := newLogFollower(ctx, logger, api.Database, api.Pubsub, api.heartbeatCloser, rw, r, job, after)
 	api.WebsocketWaitMutex.Lock()
 	api.WebsocketWaitGroup.Add(1)
 	api.WebsocketWaitMutex.Unlock()
@@ -493,15 +493,15 @@ func jobIsComplete(logger slog.Logger, job database.ProvisionerJob) bool {
 }
 
 type logFollower struct {
-	ctx              context.Context
-	logger           slog.Logger
-	db               database.Store
-	pubsub           pubsub.Pubsub
-	websocketMetrics *httpapi.WebsocketMetrics
-	r                *http.Request
-	rw               http.ResponseWriter
-	conn             *websocket.Conn
-	enc              *wsjson.Encoder[codersdk.ProvisionerJobLog]
+	ctx             context.Context
+	logger          slog.Logger
+	db              database.Store
+	pubsub          pubsub.Pubsub
+	heartbeatCloser *httpapi.HeartbeatCloser
+	r               *http.Request
+	rw              http.ResponseWriter
+	conn            *websocket.Conn
+	enc             *wsjson.Encoder[codersdk.ProvisionerJobLog]
 
 	jobID         uuid.UUID
 	after         int64
@@ -512,20 +512,22 @@ type logFollower struct {
 
 func newLogFollower(
 	ctx context.Context, logger slog.Logger, db database.Store, ps pubsub.Pubsub,
-	rw http.ResponseWriter, r *http.Request, job database.ProvisionerJob, after int64,
+	heartbeatCloser *httpapi.HeartbeatCloser, rw http.ResponseWriter, r *http.Request,
+	job database.ProvisionerJob, after int64,
 ) *logFollower {
 	return &logFollower{
-		ctx:           ctx,
-		logger:        logger,
-		db:            db,
-		pubsub:        ps,
-		r:             r,
-		rw:            rw,
-		jobID:         job.ID,
-		after:         after,
-		complete:      jobIsComplete(logger, job),
-		notifications: make(chan provisionersdk.ProvisionerJobLogsNotifyMessage),
-		errors:        make(chan error),
+		ctx:             ctx,
+		logger:          logger,
+		db:              db,
+		pubsub:          ps,
+		heartbeatCloser: heartbeatCloser,
+		r:               r,
+		rw:              rw,
+		jobID:           job.ID,
+		after:           after,
+		complete:        jobIsComplete(logger, job),
+		notifications:   make(chan provisionersdk.ProvisionerJobLogsNotifyMessage),
+		errors:          make(chan error),
 	}
 }
 
@@ -580,7 +582,7 @@ func (f *logFollower) follow() {
 		return
 	}
 	defer f.conn.Close(websocket.StatusNormalClosure, "done")
-	go httpapi.HeartbeatClose(f.ctx, f.logger, f.websocketMetrics, cancel, f.conn)
+	go f.heartbeatCloser.HeartbeatClose(f.ctx, f.logger, cancel, f.conn)
 	f.enc = wsjson.NewEncoder[codersdk.ProvisionerJobLog](f.conn, websocket.MessageText)
 
 	// query for logs once right away, so we can get historical data from before

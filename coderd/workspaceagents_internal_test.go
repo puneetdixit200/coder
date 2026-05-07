@@ -26,6 +26,7 @@ import (
 	"github.com/coder/coder/v2/coderd/database/dbauthz"
 	"github.com/coder/coder/v2/coderd/database/dbmock"
 	"github.com/coder/coder/v2/coderd/database/dbtime"
+	"github.com/coder/coder/v2/coderd/httpapi"
 	"github.com/coder/coder/v2/coderd/httpmw"
 	"github.com/coder/coder/v2/coderd/rbac"
 	"github.com/coder/coder/v2/coderd/rbac/policy"
@@ -132,6 +133,7 @@ func runWatchChatGitWorkspaceLookupTest(t *testing.T, workspaceErr error, wantSt
 				Authorizer: &mockAuthorizer{},
 				Logger:     logger,
 			},
+			heartbeatCloser: httpapi.NewHeartbeatCloser(),
 		}
 	)
 
@@ -188,6 +190,7 @@ func TestWatchChatGit(t *testing.T) {
 					Logger:                         logger,
 					DeploymentValues:               &codersdk.DeploymentValues{},
 				},
+				heartbeatCloser: httpapi.NewHeartbeatCloser(),
 			}
 		)
 
@@ -262,6 +265,7 @@ func TestWatchChatGit(t *testing.T) {
 					Logger:                         logger,
 					DeploymentValues:               &codersdk.DeploymentValues{},
 				},
+				heartbeatCloser: httpapi.NewHeartbeatCloser(),
 			}
 		)
 
@@ -769,6 +773,7 @@ func TestWatchAgentContainers(t *testing.T) {
 					DeploymentValues:               &codersdk.DeploymentValues{},
 					TailnetCoordinator:             tailnettest.NewFakeCoordinator(),
 				},
+				heartbeatCloser: httpapi.NewHeartbeatCloser(),
 			}
 		)
 
@@ -886,6 +891,7 @@ func TestWatchAgentContainers(t *testing.T) {
 					DeploymentValues:               &codersdk.DeploymentValues{},
 					TailnetCoordinator:             tailnettest.NewFakeCoordinator(),
 				},
+				heartbeatCloser: httpapi.NewHeartbeatCloser(),
 			}
 		)
 

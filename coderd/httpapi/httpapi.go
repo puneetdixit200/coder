@@ -419,7 +419,7 @@ func ServerSentEventSender(rw http.ResponseWriter, r *http.Request) (
 // open a workspace in multiple tabs, the entire UI can start to lock up.
 // WebSockets have no such limitation, no matter what HTTP protocol was used to
 // establish the connection.
-func OneWayWebSocketEventSender(log slog.Logger, metrics *WebsocketMetrics) func(rw http.ResponseWriter, r *http.Request) (
+func OneWayWebSocketEventSender(log slog.Logger, hbc *HeartbeatCloser) func(rw http.ResponseWriter, r *http.Request) (
 	func(event codersdk.ServerSentEvent) error,
 	<-chan struct{},
 	error,
@@ -436,7 +436,7 @@ func OneWayWebSocketEventSender(log slog.Logger, metrics *WebsocketMetrics) func
 			cancel()
 			return nil, nil, xerrors.Errorf("cannot establish connection: %w", err)
 		}
-		go HeartbeatClose(ctx, log, metrics, cancel, socket)
+		go hbc.HeartbeatClose(ctx, log, cancel, socket)
 
 		eventC := make(chan codersdk.ServerSentEvent, 64)
 		socketErrC := make(chan websocket.CloseError, 1)

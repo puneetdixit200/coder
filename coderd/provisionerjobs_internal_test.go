@@ -19,6 +19,7 @@ import (
 	"github.com/coder/coder/v2/coderd/database/dbmock"
 	"github.com/coder/coder/v2/coderd/database/dbtime"
 	"github.com/coder/coder/v2/coderd/database/pubsub"
+	"github.com/coder/coder/v2/coderd/httpapi"
 	"github.com/coder/coder/v2/coderd/httpmw/loggermw"
 	"github.com/coder/coder/v2/coderd/httpmw/loggermw/loggermock"
 	"github.com/coder/coder/v2/codersdk"
@@ -150,6 +151,7 @@ func Test_logFollower_completeBeforeFollow(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mDB := dbmock.NewMockStore(ctrl)
 	ps := pubsub.NewInMemory()
+	hbc := httpapi.NewHeartbeatCloser()
 	now := dbtime.Now()
 	job := database.ProvisionerJob{
 		ID:        uuid.New(),
@@ -169,7 +171,7 @@ func Test_logFollower_completeBeforeFollow(t *testing.T) {
 
 	// we need an HTTP server to get a websocket
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		uut := newLogFollower(ctx, logger, mDB, ps, rw, r, job, 10)
+		uut := newLogFollower(ctx, logger, mDB, ps, hbc, rw, r, job, 10)
 		uut.follow()
 	}))
 	defer srv.Close()
@@ -213,6 +215,7 @@ func Test_logFollower_completeBeforeSubscribe(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mDB := dbmock.NewMockStore(ctrl)
 	ps := pubsub.NewInMemory()
+	hbc := httpapi.NewHeartbeatCloser()
 	now := dbtime.Now()
 	job := database.ProvisionerJob{
 		ID:        uuid.New(),
@@ -230,7 +233,7 @@ func Test_logFollower_completeBeforeSubscribe(t *testing.T) {
 
 	// we need an HTTP server to get a websocket
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		uut := newLogFollower(ctx, logger, mDB, ps, rw, r, job, 0)
+		uut := newLogFollower(ctx, logger, mDB, ps, hbc, rw, r, job, 0)
 		uut.follow()
 	}))
 	defer srv.Close()
@@ -291,6 +294,7 @@ func Test_logFollower_EndOfLogs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mDB := dbmock.NewMockStore(ctrl)
 	ps := pubsub.NewInMemory()
+	hbc := httpapi.NewHeartbeatCloser()
 	now := dbtime.Now()
 	job := database.ProvisionerJob{
 		ID:        uuid.New(),
@@ -312,7 +316,7 @@ func Test_logFollower_EndOfLogs(t *testing.T) {
 
 	// we need an HTTP server to get a websocket
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		uut := newLogFollower(ctx, logger, mDB, ps, rw, r, job, 0)
+		uut := newLogFollower(ctx, logger, mDB, ps, hbc, rw, r, job, 0)
 		uut.follow()
 	}))
 

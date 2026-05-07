@@ -224,7 +224,7 @@ func (api *API) watchInboxNotifications(rw http.ResponseWriter, r *http.Request)
 	ctx, wsNetConn := codersdk.WebsocketNetConn(ctx, conn, websocket.MessageText)
 	defer wsNetConn.Close()
 
-	go httpapi.HeartbeatClose(ctx, logger, api.websocketMetrics, cancel, conn)
+	go api.heartbeatCloser.HeartbeatClose(ctx, logger, cancel, conn)
 
 	encoder := json.NewEncoder(wsNetConn)
 
