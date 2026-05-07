@@ -3473,6 +3473,13 @@ func (q *querier) GetMCPServerUserTokensByUserID(ctx context.Context, userID uui
 	return q.db.GetMCPServerUserTokensByUserID(ctx, userID)
 }
 
+func (q *querier) GetNextPendingWorkspaceBuildOrchestrationForUpdate(ctx context.Context) (database.WorkspaceBuildOrchestration, error) {
+	if err := q.authorizeContext(ctx, policy.ActionRead, rbac.ResourceSystem); err != nil {
+		return database.WorkspaceBuildOrchestration{}, err
+	}
+	return q.db.GetNextPendingWorkspaceBuildOrchestrationForUpdate(ctx)
+}
+
 func (q *querier) GetNotificationMessagesByStatus(ctx context.Context, arg database.GetNotificationMessagesByStatusParams) ([]database.NotificationMessage, error) {
 	if err := q.authorizeContext(ctx, policy.ActionRead, rbac.ResourceNotificationMessage); err != nil {
 		return nil, err
@@ -4893,6 +4900,27 @@ func (q *querier) GetWorkspaceBuildMetricsByResourceID(ctx context.Context, id u
 	return q.db.GetWorkspaceBuildMetricsByResourceID(ctx, id)
 }
 
+func (q *querier) GetWorkspaceBuildOrchestrationByChildBuildID(ctx context.Context, childBuildID uuid.NullUUID) (database.WorkspaceBuildOrchestration, error) {
+	if err := q.authorizeContext(ctx, policy.ActionRead, rbac.ResourceSystem); err != nil {
+		return database.WorkspaceBuildOrchestration{}, err
+	}
+	return q.db.GetWorkspaceBuildOrchestrationByChildBuildID(ctx, childBuildID)
+}
+
+func (q *querier) GetWorkspaceBuildOrchestrationByID(ctx context.Context, id uuid.UUID) (database.WorkspaceBuildOrchestration, error) {
+	if err := q.authorizeContext(ctx, policy.ActionRead, rbac.ResourceSystem); err != nil {
+		return database.WorkspaceBuildOrchestration{}, err
+	}
+	return q.db.GetWorkspaceBuildOrchestrationByID(ctx, id)
+}
+
+func (q *querier) GetWorkspaceBuildOrchestrationByParentBuildID(ctx context.Context, parentBuildID uuid.UUID) (database.WorkspaceBuildOrchestration, error) {
+	if err := q.authorizeContext(ctx, policy.ActionRead, rbac.ResourceSystem); err != nil {
+		return database.WorkspaceBuildOrchestration{}, err
+	}
+	return q.db.GetWorkspaceBuildOrchestrationByParentBuildID(ctx, parentBuildID)
+}
+
 func (q *querier) GetWorkspaceBuildParameters(ctx context.Context, workspaceBuildID uuid.UUID) ([]database.WorkspaceBuildParameter, error) {
 	// Authorized call to get the workspace build. If we can read the build,
 	// we can read the params.
@@ -5751,6 +5779,44 @@ func (q *querier) InsertWorkspaceBuild(ctx context.Context, arg database.InsertW
 	}
 
 	return q.db.InsertWorkspaceBuild(ctx, arg)
+}
+
+func (q *querier) InsertWorkspaceBuildOrchestration(ctx context.Context, arg database.InsertWorkspaceBuildOrchestrationParams) (database.WorkspaceBuildOrchestration, error) {
+	parentBuild, err := q.db.GetWorkspaceBuildByID(ctx, arg.ParentBuildID)
+	if err != nil {
+		return database.WorkspaceBuildOrchestration{}, err
+	}
+
+	workspace, err := q.db.GetWorkspaceByID(ctx, parentBuild.WorkspaceID)
+	if err != nil {
+		return database.WorkspaceBuildOrchestration{}, err
+	}
+	if workspace.IsPrebuild() {
+		return database.WorkspaceBuildOrchestration{}, xerrors.New("cannot orchestrate prebuild workspace builds")
+	}
+
+	parentAction, err := workspaceTransitionAction(parentBuild.Transition)
+	if err != nil {
+		return database.WorkspaceBuildOrchestration{}, err
+	}
+
+	if err := q.authorizeContext(ctx, parentAction, workspace); err != nil {
+		return database.WorkspaceBuildOrchestration{}, err
+	}
+
+	// The orchestrator uses system authority to create the child
+	// build after the parent succeeds, so the initiating actor must
+	// be authorized now.
+	childAction, err := workspaceTransitionAction(arg.ChildTransition)
+	if err != nil {
+		return database.WorkspaceBuildOrchestration{}, err
+	}
+
+	if err := q.authorizeContext(ctx, childAction, workspace); err != nil {
+		return database.WorkspaceBuildOrchestration{}, err
+	}
+
+	return q.db.InsertWorkspaceBuildOrchestration(ctx, arg)
 }
 
 func (q *querier) InsertWorkspaceBuildParameters(ctx context.Context, arg database.InsertWorkspaceBuildParametersParams) error {
@@ -7447,6 +7513,27 @@ func (q *querier) UpdateWorkspaceBuildFlagsByID(ctx context.Context, arg databas
 		return err
 	}
 	return q.db.UpdateWorkspaceBuildFlagsByID(ctx, arg)
+}
+
+func (q *querier) UpdateWorkspaceBuildOrchestrationCanceledByID(ctx context.Context, arg database.UpdateWorkspaceBuildOrchestrationCanceledByIDParams) (database.WorkspaceBuildOrchestration, error) {
+	if err := q.authorizeContext(ctx, policy.ActionUpdate, rbac.ResourceSystem); err != nil {
+		return database.WorkspaceBuildOrchestration{}, err
+	}
+	return q.db.UpdateWorkspaceBuildOrchestrationCanceledByID(ctx, arg)
+}
+
+func (q *querier) UpdateWorkspaceBuildOrchestrationCompletedByID(ctx context.Context, arg database.UpdateWorkspaceBuildOrchestrationCompletedByIDParams) (database.WorkspaceBuildOrchestration, error) {
+	if err := q.authorizeContext(ctx, policy.ActionUpdate, rbac.ResourceSystem); err != nil {
+		return database.WorkspaceBuildOrchestration{}, err
+	}
+	return q.db.UpdateWorkspaceBuildOrchestrationCompletedByID(ctx, arg)
+}
+
+func (q *querier) UpdateWorkspaceBuildOrchestrationFailedByID(ctx context.Context, arg database.UpdateWorkspaceBuildOrchestrationFailedByIDParams) (database.WorkspaceBuildOrchestration, error) {
+	if err := q.authorizeContext(ctx, policy.ActionUpdate, rbac.ResourceSystem); err != nil {
+		return database.WorkspaceBuildOrchestration{}, err
+	}
+	return q.db.UpdateWorkspaceBuildOrchestrationFailedByID(ctx, arg)
 }
 
 func (q *querier) UpdateWorkspaceBuildProvisionerStateByID(ctx context.Context, arg database.UpdateWorkspaceBuildProvisionerStateByIDParams) error {

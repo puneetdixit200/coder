@@ -1992,6 +1992,14 @@ func (m queryMetricsStore) GetMCPServerUserTokensByUserID(ctx context.Context, u
 	return r0, r1
 }
 
+func (m queryMetricsStore) GetNextPendingWorkspaceBuildOrchestrationForUpdate(ctx context.Context) (database.WorkspaceBuildOrchestration, error) {
+	start := time.Now()
+	r0, r1 := m.s.GetNextPendingWorkspaceBuildOrchestrationForUpdate(ctx)
+	m.queryLatencies.WithLabelValues("GetNextPendingWorkspaceBuildOrchestrationForUpdate").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetNextPendingWorkspaceBuildOrchestrationForUpdate").Inc()
+	return r0, r1
+}
+
 func (m queryMetricsStore) GetNotificationMessagesByStatus(ctx context.Context, arg database.GetNotificationMessagesByStatusParams) ([]database.NotificationMessage, error) {
 	start := time.Now()
 	r0, r1 := m.s.GetNotificationMessagesByStatus(ctx, arg)
@@ -3264,6 +3272,30 @@ func (m queryMetricsStore) GetWorkspaceBuildMetricsByResourceID(ctx context.Cont
 	return r0, r1
 }
 
+func (m queryMetricsStore) GetWorkspaceBuildOrchestrationByChildBuildID(ctx context.Context, childBuildID uuid.NullUUID) (database.WorkspaceBuildOrchestration, error) {
+	start := time.Now()
+	r0, r1 := m.s.GetWorkspaceBuildOrchestrationByChildBuildID(ctx, childBuildID)
+	m.queryLatencies.WithLabelValues("GetWorkspaceBuildOrchestrationByChildBuildID").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetWorkspaceBuildOrchestrationByChildBuildID").Inc()
+	return r0, r1
+}
+
+func (m queryMetricsStore) GetWorkspaceBuildOrchestrationByID(ctx context.Context, id uuid.UUID) (database.WorkspaceBuildOrchestration, error) {
+	start := time.Now()
+	r0, r1 := m.s.GetWorkspaceBuildOrchestrationByID(ctx, id)
+	m.queryLatencies.WithLabelValues("GetWorkspaceBuildOrchestrationByID").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetWorkspaceBuildOrchestrationByID").Inc()
+	return r0, r1
+}
+
+func (m queryMetricsStore) GetWorkspaceBuildOrchestrationByParentBuildID(ctx context.Context, parentBuildID uuid.UUID) (database.WorkspaceBuildOrchestration, error) {
+	start := time.Now()
+	r0, r1 := m.s.GetWorkspaceBuildOrchestrationByParentBuildID(ctx, parentBuildID)
+	m.queryLatencies.WithLabelValues("GetWorkspaceBuildOrchestrationByParentBuildID").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "GetWorkspaceBuildOrchestrationByParentBuildID").Inc()
+	return r0, r1
+}
+
 func (m queryMetricsStore) GetWorkspaceBuildParameters(ctx context.Context, workspaceBuildID uuid.UUID) ([]database.WorkspaceBuildParameter, error) {
 	start := time.Now()
 	r0, r1 := m.s.GetWorkspaceBuildParameters(ctx, workspaceBuildID)
@@ -4062,6 +4094,14 @@ func (m queryMetricsStore) InsertWorkspaceBuild(ctx context.Context, arg databas
 	m.queryLatencies.WithLabelValues("InsertWorkspaceBuild").Observe(time.Since(start).Seconds())
 	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "InsertWorkspaceBuild").Inc()
 	return r0
+}
+
+func (m queryMetricsStore) InsertWorkspaceBuildOrchestration(ctx context.Context, arg database.InsertWorkspaceBuildOrchestrationParams) (database.WorkspaceBuildOrchestration, error) {
+	start := time.Now()
+	r0, r1 := m.s.InsertWorkspaceBuildOrchestration(ctx, arg)
+	m.queryLatencies.WithLabelValues("InsertWorkspaceBuildOrchestration").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "InsertWorkspaceBuildOrchestration").Inc()
+	return r0, r1
 }
 
 func (m queryMetricsStore) InsertWorkspaceBuildParameters(ctx context.Context, arg database.InsertWorkspaceBuildParametersParams) error {
@@ -5286,6 +5326,30 @@ func (m queryMetricsStore) UpdateWorkspaceBuildFlagsByID(ctx context.Context, ar
 	m.queryLatencies.WithLabelValues("UpdateWorkspaceBuildFlagsByID").Observe(time.Since(start).Seconds())
 	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "UpdateWorkspaceBuildFlagsByID").Inc()
 	return r0
+}
+
+func (m queryMetricsStore) UpdateWorkspaceBuildOrchestrationCanceledByID(ctx context.Context, arg database.UpdateWorkspaceBuildOrchestrationCanceledByIDParams) (database.WorkspaceBuildOrchestration, error) {
+	start := time.Now()
+	r0, r1 := m.s.UpdateWorkspaceBuildOrchestrationCanceledByID(ctx, arg)
+	m.queryLatencies.WithLabelValues("UpdateWorkspaceBuildOrchestrationCanceledByID").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "UpdateWorkspaceBuildOrchestrationCanceledByID").Inc()
+	return r0, r1
+}
+
+func (m queryMetricsStore) UpdateWorkspaceBuildOrchestrationCompletedByID(ctx context.Context, arg database.UpdateWorkspaceBuildOrchestrationCompletedByIDParams) (database.WorkspaceBuildOrchestration, error) {
+	start := time.Now()
+	r0, r1 := m.s.UpdateWorkspaceBuildOrchestrationCompletedByID(ctx, arg)
+	m.queryLatencies.WithLabelValues("UpdateWorkspaceBuildOrchestrationCompletedByID").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "UpdateWorkspaceBuildOrchestrationCompletedByID").Inc()
+	return r0, r1
+}
+
+func (m queryMetricsStore) UpdateWorkspaceBuildOrchestrationFailedByID(ctx context.Context, arg database.UpdateWorkspaceBuildOrchestrationFailedByIDParams) (database.WorkspaceBuildOrchestration, error) {
+	start := time.Now()
+	r0, r1 := m.s.UpdateWorkspaceBuildOrchestrationFailedByID(ctx, arg)
+	m.queryLatencies.WithLabelValues("UpdateWorkspaceBuildOrchestrationFailedByID").Observe(time.Since(start).Seconds())
+	m.queryCounts.WithLabelValues(httpmw.ExtractHTTPRoute(ctx), httpmw.ExtractHTTPMethod(ctx), "UpdateWorkspaceBuildOrchestrationFailedByID").Inc()
+	return r0, r1
 }
 
 func (m queryMetricsStore) UpdateWorkspaceBuildProvisionerStateByID(ctx context.Context, arg database.UpdateWorkspaceBuildProvisionerStateByIDParams) error {

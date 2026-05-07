@@ -463,6 +463,9 @@ type sqlcQuerier interface {
 	GetMCPServerConfigsByIDs(ctx context.Context, ids []uuid.UUID) ([]MCPServerConfig, error)
 	GetMCPServerUserToken(ctx context.Context, arg GetMCPServerUserTokenParams) (MCPServerUserToken, error)
 	GetMCPServerUserTokensByUserID(ctx context.Context, userID uuid.UUID) ([]MCPServerUserToken, error)
+	// Must be called from within a transaction. The row lock is released
+	// when the transaction ends.
+	GetNextPendingWorkspaceBuildOrchestrationForUpdate(ctx context.Context) (WorkspaceBuildOrchestration, error)
 	GetNotificationMessagesByStatus(ctx context.Context, arg GetNotificationMessagesByStatusParams) ([]NotificationMessage, error)
 	// Fetch the notification report generator log indicating recent activity.
 	GetNotificationReportGeneratorLogByTemplate(ctx context.Context, templateID uuid.UUID) (NotificationReportGeneratorLog, error)
@@ -803,6 +806,9 @@ type sqlcQuerier interface {
 	// Returns build metadata for e2e workspace build duration metrics.
 	// Also checks if all agents are ready and returns the worst status.
 	GetWorkspaceBuildMetricsByResourceID(ctx context.Context, id uuid.UUID) (GetWorkspaceBuildMetricsByResourceIDRow, error)
+	GetWorkspaceBuildOrchestrationByChildBuildID(ctx context.Context, childBuildID uuid.NullUUID) (WorkspaceBuildOrchestration, error)
+	GetWorkspaceBuildOrchestrationByID(ctx context.Context, id uuid.UUID) (WorkspaceBuildOrchestration, error)
+	GetWorkspaceBuildOrchestrationByParentBuildID(ctx context.Context, parentBuildID uuid.UUID) (WorkspaceBuildOrchestration, error)
 	GetWorkspaceBuildParameters(ctx context.Context, workspaceBuildID uuid.UUID) ([]WorkspaceBuildParameter, error)
 	// Fetches the provisioner state of a workspace build, joined through to the
 	// template so that dbauthz can enforce policy.ActionUpdate on the template.
@@ -945,6 +951,7 @@ type sqlcQuerier interface {
 	InsertWorkspaceAppStats(ctx context.Context, arg InsertWorkspaceAppStatsParams) error
 	InsertWorkspaceAppStatus(ctx context.Context, arg InsertWorkspaceAppStatusParams) (WorkspaceAppStatus, error)
 	InsertWorkspaceBuild(ctx context.Context, arg InsertWorkspaceBuildParams) error
+	InsertWorkspaceBuildOrchestration(ctx context.Context, arg InsertWorkspaceBuildOrchestrationParams) (WorkspaceBuildOrchestration, error)
 	InsertWorkspaceBuildParameters(ctx context.Context, arg InsertWorkspaceBuildParametersParams) error
 	InsertWorkspaceModule(ctx context.Context, arg InsertWorkspaceModuleParams) (WorkspaceModule, error)
 	InsertWorkspaceProxy(ctx context.Context, arg InsertWorkspaceProxyParams) (WorkspaceProxy, error)
@@ -1228,6 +1235,9 @@ type sqlcQuerier interface {
 	UpdateWorkspaceBuildCostByID(ctx context.Context, arg UpdateWorkspaceBuildCostByIDParams) error
 	UpdateWorkspaceBuildDeadlineByID(ctx context.Context, arg UpdateWorkspaceBuildDeadlineByIDParams) error
 	UpdateWorkspaceBuildFlagsByID(ctx context.Context, arg UpdateWorkspaceBuildFlagsByIDParams) error
+	UpdateWorkspaceBuildOrchestrationCanceledByID(ctx context.Context, arg UpdateWorkspaceBuildOrchestrationCanceledByIDParams) (WorkspaceBuildOrchestration, error)
+	UpdateWorkspaceBuildOrchestrationCompletedByID(ctx context.Context, arg UpdateWorkspaceBuildOrchestrationCompletedByIDParams) (WorkspaceBuildOrchestration, error)
+	UpdateWorkspaceBuildOrchestrationFailedByID(ctx context.Context, arg UpdateWorkspaceBuildOrchestrationFailedByIDParams) (WorkspaceBuildOrchestration, error)
 	UpdateWorkspaceBuildProvisionerStateByID(ctx context.Context, arg UpdateWorkspaceBuildProvisionerStateByIDParams) error
 	UpdateWorkspaceDeletedByID(ctx context.Context, arg UpdateWorkspaceDeletedByIDParams) error
 	UpdateWorkspaceDormantDeletingAt(ctx context.Context, arg UpdateWorkspaceDormantDeletingAtParams) (WorkspaceTable, error)

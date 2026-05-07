@@ -901,6 +901,8 @@ func New(options *Options) *API {
 		APIKeyEncryptionKeycache: options.AppEncryptionKeyCache,
 	})
 
+	newWorkspaceBuildOrchestrator(api).start(api.ctx)
+
 	apiKeyMiddleware := httpmw.ExtractAPIKeyMW(httpmw.ExtractAPIKeyConfig{
 		DB:                            options.Database,
 		ActivateDormantUser:           ActivateDormantUser(options.Logger, &api.Auditor, options.Database),
