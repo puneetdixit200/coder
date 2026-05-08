@@ -37,6 +37,7 @@ import {
 	Tool,
 } from "../ChatElements";
 import { WebSearchSources } from "../ChatElements/tools";
+import { ReadFilesTool } from "../ChatElements/tools/ReadFilesTool";
 import type { SubagentVariant } from "../ChatElements/tools/subagentDescriptor";
 import { ImageLightbox } from "../ImageLightbox";
 import { TextPreviewDialog } from "../TextPreviewDialog";
@@ -44,8 +45,15 @@ import {
 	AttachmentBlock,
 	type PreviewTextAttachment,
 } from "./AttachmentBlocks";
+import {
+	getToolIDsForBlock,
+	groupSequentialReadFileBlocks,
+} from "./blockUtils";
 import { FileProbeProvider } from "./FileProbeContext";
-import { deriveMessageDisplayState } from "./messageHelpers";
+import {
+	deriveMessageDisplayState,
+	groupSequentialReadFileMessages,
+} from "./messageHelpers";
 import { getEditableUserMessagePayload } from "./messageParsing";
 import { useSmoothStreamingText } from "./SmoothText";
 import type {
@@ -281,16 +289,17 @@ export const BlockList: FC<{
 		prefQuery.data?.code_diff_display_mode || "auto";
 
 	const toolByID = new Map(tools.map((tool) => [tool.id, tool]));
+	const displayBlocks = groupSequentialReadFileBlocks(blocks, tools);
 
 	// Pre-compute which tool IDs have a corresponding block so
 	// we can render "remaining" (block-less) tools afterwards.
 	const blockToolIDs = new Set(
-		blocks
-			.filter(
-				(b): b is Extract<RenderBlock, { type: "tool" }> =>
-					b.type === "tool" && (toolByID.has(b.id) || isStreaming),
-			)
-			.map((b) => b.id),
+		displayBlocks.flatMap((block) => {
+			if (block.type === "tool" && !(toolByID.has(block.id) || isStreaming)) {
+				return [];
+			}
+			return [...getToolIDsForBlock(block)];
+		}),
 	);
 
 	const remainingTools = tools.filter((tool) => !blockToolIDs.has(tool.id));
@@ -298,12 +307,13 @@ export const BlockList: FC<{
 	// A thinking block is actively streaming only when it is the
 	// very last block in the list. Once newer content arrives
 	// (response, tool call, etc.) the thinking phase is over.
-	const lastBlockIsThinking =
-		blocks.length > 0 && blocks[blocks.length - 1].type === "thinking";
+	const lastDisplayBlockIsThinking =
+		displayBlocks.length > 0 &&
+		displayBlocks[displayBlocks.length - 1].type === "thinking";
 
 	return (
 		<>
-			{blocks.map((block, index) => {
+			{displayBlocks.map((block, index) => {
 				switch (block.type) {
 					case "response": {
 						const responseEl = isStreaming ? (
@@ -335,8 +345,8 @@ export const BlockList: FC<{
 								text={block.text}
 								isStreaming={
 									isStreaming &&
-									lastBlockIsThinking &&
-									index === blocks.length - 1
+									lastDisplayBlockIsThinking &&
+									index === displayBlocks.length - 1
 								}
 								urlTransform={urlTransform}
 								thinkingDisplayMode={thinkingDisplayMode}
@@ -356,6 +366,20 @@ export const BlockList: FC<{
 								</span>
 							</div>
 						);
+					case "tool-group": {
+						const groupTools = block.ids
+							.map((id) => toolByID.get(id))
+							.filter((tool): tool is MergedTool => Boolean(tool));
+						if (groupTools.length === 0) {
+							return null;
+						}
+						return (
+							<ReadFilesTool
+								key={`${keyPrefix}-tool-group-${index}`}
+								tools={groupTools}
+							/>
+						);
+					}
 					case "tool": {
 						const tool = toolByID.get(block.id);
 						if (!tool) {
@@ -1022,7 +1046,8 @@ export const ConversationTimeline = memo<ConversationTimelineProps>(
 		hasActiveStream,
 		isAwaitingFirstStreamChunk,
 	}) => {
-		const lastInChainFlags = computeLastInChainFlags(parsedMessages);
+		const displayMessages = groupSequentialReadFileMessages(parsedMessages);
+		const lastInChainFlags = computeLastInChainFlags(displayMessages);
 
 		if (parsedMessages.length === 0) {
 			return null;
@@ -1086,7 +1111,7 @@ export const ConversationTimeline = memo<ConversationTimelineProps>(
 					data-testid="conversation-timeline"
 					className="flex flex-col gap-2"
 				>
-					{parsedMessages.map(({ message, parsed }, msgIdx) => {
+					{displayMessages.map(({ message, parsed }, msgIdx) => {
 						if (message.role === "user") {
 							const { shouldHide } = deriveMessageDisplayState({
 								message,
