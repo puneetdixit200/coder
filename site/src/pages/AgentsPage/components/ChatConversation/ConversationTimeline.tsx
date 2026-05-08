@@ -36,12 +36,13 @@ import {
 	Shimmer,
 	Tool,
 } from "../ChatElements";
-import { asRecord, asString } from "../ChatElements/runtimeTypeUtils";
 import { WebSearchSources } from "../ChatElements/tools";
 import { ReadFilesTool } from "../ChatElements/tools/ReadFilesTool";
-import { ReadFileTool } from "../ChatElements/tools/ReadFileTool";
+import {
+	getReadFileToolData,
+	ReadFileTool,
+} from "../ChatElements/tools/ReadFileTool";
 import type { SubagentVariant } from "../ChatElements/tools/subagentDescriptor";
-import { parseArgs } from "../ChatElements/tools/utils";
 import { ImageLightbox } from "../ImageLightbox";
 import { TextPreviewDialog } from "../TextPreviewDialog";
 import {
@@ -249,23 +250,15 @@ const ReadFileTimelineBlock = memo<{
 	}
 
 	if (tools.length === 1) {
-		const parsedArgs = parseArgs(firstTool.args);
-		const path = parsedArgs ? asString(parsedArgs.path).trim() : "";
-		const result = asRecord(firstTool.result);
-		const content = result ? asString(result.content).trim() : "";
+		const readFile = getReadFileToolData(firstTool);
 		return (
 			<div
 				data-tool-call=""
 				className="py-0.5 [&:has(+[data-tool-call])]:pb-0 [[data-tool-call]+&]:pt-0"
 			>
 				<ReadFileTool
-					path={path || "file"}
-					content={content}
+					{...readFile}
 					status={firstTool.status}
-					isError={firstTool.isError}
-					errorMessage={
-						result ? asString(result.error || result.message) : undefined
-					}
 					expanded={expanded}
 					onExpandedChange={setExpanded}
 				/>
@@ -1037,25 +1030,16 @@ const StickyUserMessage = memo<{
 );
 
 function computeLastInChainFlags(
-	parsedMessages: readonly ParsedMessageEntry[],
+	displayMessages: readonly ParsedMessageEntry[],
 ): boolean[] {
-	const flags = new Array<boolean>(parsedMessages.length).fill(false);
+	const flags = new Array<boolean>(displayMessages.length).fill(false);
 	let nextVisibleIsUser = true; // no next visible => treat as chain end
-	for (let i = parsedMessages.length - 1; i >= 0; i--) {
-		const entry = parsedMessages[i];
-		const { shouldHide } = deriveMessageDisplayState({
-			message: entry.message,
-			parsed: entry.parsed,
-			hideActions: false,
-			hasActiveStream: false,
-			isAwaitingFirstStreamChunk: false,
-		});
+	for (let i = displayMessages.length - 1; i >= 0; i--) {
+		const entry = displayMessages[i];
 		if (entry.message.role !== "user") {
 			flags[i] = nextVisibleIsUser;
 		}
-		if (!shouldHide) {
-			nextVisibleIsUser = entry.message.role === "user";
-		}
+		nextVisibleIsUser = entry.message.role === "user";
 	}
 	return flags;
 }
