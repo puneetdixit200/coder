@@ -34,6 +34,6 @@ func Test_Manager_EnumerateExternalAgents_invalidTokenIsFatal(t *testing.T) {
 
 	_, err = m.EnumerateExternalAgents(ctx)
 	require.Error(t, err, "expected enumeration to fail with an invalid session token")
-	require.True(t, isFatalEnumerationError(err),
+	require.True(t, IsFatalEnumerationError(err),
 		"expected error to be classified as fatal so the harness exits and Kubernetes can restart it; got: %v", err)
 }
