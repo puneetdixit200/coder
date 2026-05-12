@@ -191,8 +191,6 @@ func Test_Manager_EnumerateExternalAgents_invalidTokenIsFatal(t *testing.T) {
 		"expected error to be classified as fatal so the harness exits and Kubernetes can restart it; got: %v", err)
 }
 
-
-
 // buildExternalAgentWorkspace creates one workspace with a coder_external_agent resource, an agent, and
 // HasExternalAgent=true on the latest build. If templateID is uuid.Nil, dbfake mints a fresh template (and the caller
 // can pass the returned Workspace.TemplateID into subsequent calls to share the template).
