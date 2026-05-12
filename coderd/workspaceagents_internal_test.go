@@ -133,7 +133,7 @@ func runWatchChatGitWorkspaceLookupTest(t *testing.T, workspaceErr error, wantSt
 				Authorizer: &mockAuthorizer{},
 				Logger:     logger,
 			},
-			heartbeatCloser: httpapi.NewHeartbeatCloser(),
+			wsWatcher: httpapi.NewWSWatcher(nil),
 		}
 	)
 
@@ -190,7 +190,7 @@ func TestWatchChatGit(t *testing.T) {
 					Logger:                         logger,
 					DeploymentValues:               &codersdk.DeploymentValues{},
 				},
-				heartbeatCloser: httpapi.NewHeartbeatCloser(),
+				wsWatcher: httpapi.NewWSWatcher(nil),
 			}
 		)
 
@@ -265,7 +265,7 @@ func TestWatchChatGit(t *testing.T) {
 					Logger:                         logger,
 					DeploymentValues:               &codersdk.DeploymentValues{},
 				},
-				heartbeatCloser: httpapi.NewHeartbeatCloser(),
+				wsWatcher: httpapi.NewWSWatcher(nil),
 			}
 		)
 
@@ -426,6 +426,7 @@ func TestWatchChatGit(t *testing.T) {
 					Authorizer: &mockAuthorizer{},
 					Logger:     logger,
 				},
+				wsWatcher: httpapi.NewWSWatcher(nil),
 			}
 		)
 
@@ -604,6 +605,7 @@ func TestWatchChatGit(t *testing.T) {
 					Authorizer: &mockAuthorizer{},
 					Logger:     logger,
 				},
+				wsWatcher: httpapi.NewWSWatcher(nil),
 			}
 		)
 
@@ -773,7 +775,7 @@ func TestWatchAgentContainers(t *testing.T) {
 					DeploymentValues:               &codersdk.DeploymentValues{},
 					TailnetCoordinator:             tailnettest.NewFakeCoordinator(),
 				},
-				heartbeatCloser: httpapi.NewHeartbeatCloser(),
+				wsWatcher: httpapi.NewWSWatcher(nil),
 			}
 		)
 
@@ -891,7 +893,7 @@ func TestWatchAgentContainers(t *testing.T) {
 					DeploymentValues:               &codersdk.DeploymentValues{},
 					TailnetCoordinator:             tailnettest.NewFakeCoordinator(),
 				},
-				heartbeatCloser: httpapi.NewHeartbeatCloser(),
+				wsWatcher: httpapi.NewWSWatcher(nil),
 			}
 		)
 

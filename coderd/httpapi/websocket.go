@@ -6,7 +6,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/xerrors"
 
 	"cdr.dev/slog/v3"
@@ -16,87 +15,63 @@ import (
 
 const HeartbeatInterval time.Duration = 15 * time.Second
 
-const websocketHeartbeatsHelp = "Total successful WebSocket heartbeat " +
-	"pings, labeled by route. Compare " +
-	"rate(coderd_api_websocket_heartbeats_total[1m]) * 15 against " +
-	"coderd_api_concurrent_websockets to detect zombie connections or " +
-	"wedged handlers."
+// ProbeResult classifies the outcome of a single WebSocket liveness
+// probe so that callers (typically a Prometheus recorder) can track
+// successes and the various failure modes independently.
+type ProbeResult string
 
-// HeartbeatCloser periodically checks websocket connection liveness and closes
-// it if the ping fails. The zero value is safe for use.
-type HeartbeatCloser struct {
-	clk        quartz.Clock
-	heartbeats *prometheus.CounterVec
-	pathFn     func(context.Context) string
+const (
+	ProbeOK         ProbeResult = "ok"
+	ProbeTimeout    ProbeResult = "timeout"
+	ProbePeerClosed ProbeResult = "peer_closed"
+	ProbeCanceled   ProbeResult = "canceled"
+	ProbeError      ProbeResult = "error"
+)
+
+// ProbeRecorder is called once per liveness probe with its outcome.
+// It may be nil, in which case probes are still run but not recorded.
+type ProbeRecorder func(ctx context.Context, result ProbeResult)
+
+// WSWatcher supervises WebSocket connections for liveness by
+// periodically sending ping frames. On probe failure, the watcher
+// closes the connection with StatusGoingAway and cancels the
+// returned context; the caller owns closing the connection on
+// normal teardown.
+type WSWatcher struct {
+	rec      ProbeRecorder
+	clk      quartz.Clock
+	interval time.Duration
 }
 
-// NewHeartbeatCloser creates a new HeartbeatCloser without metrics.
-func NewHeartbeatCloser() *HeartbeatCloser {
-	hbc := &HeartbeatCloser{
-		clk: quartz.NewReal(),
+// NewWSWatcher creates a WSWatcher. Pass nil for rec when no
+// recording is needed (e.g. agent-side code without a Prometheus
+// registry).
+func NewWSWatcher(rec ProbeRecorder) *WSWatcher {
+	return &WSWatcher{
+		rec:      rec,
+		clk:      quartz.NewReal(),
+		interval: HeartbeatInterval,
 	}
-	return hbc
 }
 
-// WithMetrics configures successful heartbeat counting. It must be called
-// before the HeartbeatCloser is registered or used by any handlers. It is
-// the responsibility of the caller to register HeartbeatCloser with a
-// Prometheus registry.
-func (hc *HeartbeatCloser) WithMetrics(pathFn func(context.Context) string) *HeartbeatCloser {
-	hc.pathFn = pathFn
-	hc.heartbeats = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "coderd",
-		Subsystem: "api",
-		Name:      "websocket_heartbeats_total",
-		Help:      websocketHeartbeatsHelp,
-	}, []string{"path"})
-	if hc.clk == nil {
-		hc.clk = quartz.NewReal()
+// Watch supervises conn for liveness. The returned context is
+// canceled when parent is canceled or when conn fails a probe.
+// Watch closes conn on probe failure with StatusGoingAway; the
+// caller owns close on normal teardown.
+func (w *WSWatcher) Watch(parent context.Context, log slog.Logger, conn *websocket.Conn) context.Context {
+	if w == nil {
+		panic("developer error: WSWatcher is nil")
 	}
-	return hc
+	ctx, cancel := context.WithCancel(parent)
+	go func() {
+		defer cancel()
+		w.supervise(ctx, log, conn)
+	}()
+	return ctx
 }
 
-func (hc *HeartbeatCloser) recordHeartbeat(ctx context.Context) {
-	if hc == nil || hc.heartbeats == nil {
-		return
-	}
-	path := "UNKNOWN"
-	if hc.pathFn != nil {
-		if rp := hc.pathFn(ctx); rp != "" {
-			path = rp
-		}
-	}
-	hc.heartbeats.WithLabelValues(path).Inc()
-}
-
-// HeartbeatClose loops to ping a WebSocket to keep it alive.
-// It calls `exit` on ping failure.
-func (hc *HeartbeatCloser) HeartbeatClose(ctx context.Context, logger slog.Logger, exit func(), conn *websocket.Conn) {
-	if hc == nil || hc.clk == nil {
-		heartbeatCloseWith(ctx, logger, nil, exit, conn, quartz.NewReal(), HeartbeatInterval)
-		return
-	}
-	heartbeatCloseWith(ctx, logger, hc.recordHeartbeat, exit, conn, hc.clk, HeartbeatInterval)
-}
-
-// Collect implements prometheus.Collector.
-func (hc *HeartbeatCloser) Collect(ch chan<- prometheus.Metric) {
-	if hc == nil || hc.heartbeats == nil {
-		return
-	}
-	hc.heartbeats.Collect(ch)
-}
-
-// Describe implements prometheus.Collector.
-func (hc *HeartbeatCloser) Describe(ch chan<- *prometheus.Desc) {
-	if hc == nil || hc.heartbeats == nil {
-		return
-	}
-	hc.heartbeats.Describe(ch)
-}
-
-func heartbeatCloseWith(ctx context.Context, logger slog.Logger, recordHeartbeat func(context.Context), exit func(), conn *websocket.Conn, clk quartz.Clock, interval time.Duration) {
-	ticker := clk.NewTicker(interval, "HeartbeatClose")
+func (w *WSWatcher) supervise(ctx context.Context, log slog.Logger, conn *websocket.Conn) {
+	ticker := w.clk.NewTicker(w.interval, "WSWatcher")
 	defer ticker.Stop()
 
 	for {
@@ -105,42 +80,39 @@ func heartbeatCloseWith(ctx context.Context, logger slog.Logger, recordHeartbeat
 			return
 		case <-ticker.C:
 		}
-		err := pingWithTimeout(ctx, conn, interval)
-		if err != nil {
-			// These errors are all expected during normal connection
-			// teardown and should not be logged at error level:
-			//   - context.DeadlineExceeded: client disconnected
-			//     without sending a close frame.
-			//   - context.Canceled: request context was canceled.
-			//   - net.ErrClosed: connection was already closed by
-			//     another goroutine (e.g. handler returned).
-			//   - websocket.CloseError: a close frame was
-			//     received or sent.
-			if errors.Is(err, context.DeadlineExceeded) ||
-				errors.Is(err, context.Canceled) ||
-				errors.Is(err, net.ErrClosed) ||
-				websocket.CloseStatus(err) != -1 {
-				logger.Debug(ctx, "heartbeat ping stopped", slog.Error(err))
-			} else {
-				logger.Error(ctx, "failed to heartbeat ping", slog.Error(err))
-			}
-			_ = conn.Close(websocket.StatusGoingAway, "Ping failed")
-			exit()
-			return
+
+		result, err := probe(ctx, conn, w.interval)
+		if w.rec != nil {
+			w.rec(ctx, result)
 		}
-		if recordHeartbeat != nil {
-			recordHeartbeat(ctx)
+		if result == ProbeOK {
+			continue
 		}
+		if result == ProbeError {
+			log.Error(ctx, "websocket probe failed", slog.Error(err))
+		} else {
+			log.Debug(ctx, "websocket probe stopped",
+				slog.F("result", string(result)), slog.Error(err))
+		}
+		_ = conn.Close(websocket.StatusGoingAway, "liveness probe failed")
+		return
 	}
 }
 
-func pingWithTimeout(ctx context.Context, conn *websocket.Conn, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+func probe(ctx context.Context, conn *websocket.Conn, timeout time.Duration) (ProbeResult, error) {
+	pingCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	err := conn.Ping(ctx)
-	if err != nil {
-		return xerrors.Errorf("failed to ping: %w", err)
+	err := conn.Ping(pingCtx)
+	switch {
+	case err == nil:
+		return ProbeOK, nil
+	case errors.Is(err, context.Canceled):
+		return ProbeCanceled, err
+	case errors.Is(err, context.DeadlineExceeded):
+		return ProbeTimeout, err
+	case errors.Is(err, net.ErrClosed) || websocket.CloseStatus(err) != -1:
+		return ProbePeerClosed, err
+	default:
+		return ProbeError, xerrors.Errorf("ping: %w", err)
 	}
-
-	return nil
 }

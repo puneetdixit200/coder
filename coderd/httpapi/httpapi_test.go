@@ -272,11 +272,11 @@ func TestOneWayWebSocketEventSender(t *testing.T) {
 		t.Parallel()
 
 		ctx := testutil.Context(t, testutil.WaitShort)
-		hbc := httpapi.NewHeartbeatCloser()
+		wsw := httpapi.NewWSWatcher(nil)
 
 		req := newBaseRequest(ctx)
 		writer := newOneWayWriter(t)
-		send, _, err := httpapi.OneWayWebSocketEventSender(slogtest.Make(t, nil), hbc)(writer, req)
+		send, _, err := httpapi.OneWayWebSocketEventSender(slogtest.Make(t, nil), wsw)(writer, req)
 		require.NoError(t, err)
 
 		serverPayload := codersdk.ServerSentEvent{
@@ -300,10 +300,10 @@ func TestOneWayWebSocketEventSender(t *testing.T) {
 		t.Parallel()
 
 		ctx, cancel := context.WithCancel(testutil.Context(t, testutil.WaitShort))
-		hbc := httpapi.NewHeartbeatCloser()
+		wsw := httpapi.NewWSWatcher(nil)
 		req := newBaseRequest(ctx)
 		writer := newOneWayWriter(t)
-		_, done, err := httpapi.OneWayWebSocketEventSender(slogtest.Make(t, nil), hbc)(writer, req)
+		_, done, err := httpapi.OneWayWebSocketEventSender(slogtest.Make(t, nil), wsw)(writer, req)
 		require.NoError(t, err)
 
 		successC := make(chan bool)
@@ -325,10 +325,10 @@ func TestOneWayWebSocketEventSender(t *testing.T) {
 		t.Parallel()
 
 		ctx := testutil.Context(t, testutil.WaitShort)
-		hbc := httpapi.NewHeartbeatCloser()
+		wsw := httpapi.NewWSWatcher(nil)
 		req := newBaseRequest(ctx)
 		writer := newOneWayWriter(t)
-		_, done, err := httpapi.OneWayWebSocketEventSender(slogtest.Make(t, nil), hbc)(writer, req)
+		_, done, err := httpapi.OneWayWebSocketEventSender(slogtest.Make(t, nil), wsw)(writer, req)
 		require.NoError(t, err)
 
 		successC := make(chan bool)
@@ -356,10 +356,10 @@ func TestOneWayWebSocketEventSender(t *testing.T) {
 		t.Parallel()
 
 		ctx, cancel := context.WithCancel(testutil.Context(t, testutil.WaitShort))
-		hbc := httpapi.NewHeartbeatCloser()
+		wsw := httpapi.NewWSWatcher(nil)
 		req := newBaseRequest(ctx)
 		writer := newOneWayWriter(t)
-		send, done, err := httpapi.OneWayWebSocketEventSender(slogtest.Make(t, nil), hbc)(writer, req)
+		send, done, err := httpapi.OneWayWebSocketEventSender(slogtest.Make(t, nil), wsw)(writer, req)
 		require.NoError(t, err)
 
 		successC := make(chan bool)
@@ -398,10 +398,10 @@ func TestOneWayWebSocketEventSender(t *testing.T) {
 		timeout := hbDuration + (5 * time.Second)
 
 		ctx := testutil.Context(t, timeout)
-		hbc := httpapi.NewHeartbeatCloser()
+		wsw := httpapi.NewWSWatcher(nil)
 		req := newBaseRequest(ctx)
 		writer := newOneWayWriter(t)
-		_, _, err := httpapi.OneWayWebSocketEventSender(slogtest.Make(t, nil), hbc)(writer, req)
+		_, _, err := httpapi.OneWayWebSocketEventSender(slogtest.Make(t, nil), wsw)(writer, req)
 		require.NoError(t, err)
 
 		type Result struct {

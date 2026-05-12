@@ -216,15 +216,12 @@ func (api *API) watchInboxNotifications(rw http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	_ = conn.CloseRead(context.Background())
 
 	ctx, wsNetConn := codersdk.WebsocketNetConn(ctx, conn, websocket.MessageText)
 	defer wsNetConn.Close()
 
-	go api.heartbeatCloser.HeartbeatClose(ctx, logger, cancel, conn)
+	ctx = api.wsWatcher.Watch(ctx, logger, conn)
 
 	encoder := json.NewEncoder(wsNetConn)
 

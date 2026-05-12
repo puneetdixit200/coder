@@ -2034,7 +2034,7 @@ func (api *API) watchWorkspaceSSE(rw http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} codersdk.ServerSentEvent
 // @Router /api/v2/workspaces/{workspace}/watch-ws [get]
 func (api *API) watchWorkspaceWS(rw http.ResponseWriter, r *http.Request) {
-	api.watchWorkspace(rw, r, httpapi.OneWayWebSocketEventSender(api.Logger, api.heartbeatCloser))
+	api.watchWorkspace(rw, r, httpapi.OneWayWebSocketEventSender(api.Logger, api.wsWatcher))
 }
 
 func (api *API) watchWorkspace(
@@ -2230,9 +2230,7 @@ func (api *API) watchAllWorkspaceBuilds(rw http.ResponseWriter, r *http.Request)
 	// including Pong messages sent in response to our Ping heartbeats.
 	_ = conn.CloseRead(context.Background())
 
-	ctx, cancel := context.WithCancel(ctx)
-	go api.heartbeatCloser.HeartbeatClose(ctx, api.Logger, cancel, conn)
-	defer cancel()
+	ctx = api.wsWatcher.Watch(ctx, api.Logger, conn)
 
 	enc := wsjson.NewEncoder[codersdk.WorkspaceBuildUpdate](conn, websocket.MessageText)
 	for {

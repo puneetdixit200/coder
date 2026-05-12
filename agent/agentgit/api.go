@@ -1,7 +1,6 @@
 package agentgit
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -17,19 +16,19 @@ import (
 
 // API exposes the git watch HTTP routes for the agent.
 type API struct {
-	logger          slog.Logger
-	opts            []Option
-	pathStore       *PathStore
-	heartbeatCloser *httpapi.HeartbeatCloser
+	logger    slog.Logger
+	opts      []Option
+	pathStore *PathStore
+	wsWatcher *httpapi.WSWatcher
 }
 
 // NewAPI creates a new git watch API.
 func NewAPI(logger slog.Logger, pathStore *PathStore, opts ...Option) *API {
 	return &API{
-		logger:          logger,
-		pathStore:       pathStore,
-		opts:            opts,
-		heartbeatCloser: httpapi.NewHeartbeatCloser(),
+		logger:    logger,
+		pathStore: pathStore,
+		opts:      opts,
+		wsWatcher: httpapi.NewWSWatcher(nil),
 	}
 }
 
@@ -82,10 +81,7 @@ func (a *API) handleWatch(rw http.ResponseWriter, r *http.Request) {
 		codersdk.WorkspaceAgentGitServerMessage,
 	](conn, websocket.MessageText, websocket.MessageText, logger)
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	go a.heartbeatCloser.HeartbeatClose(ctx, a.logger, cancel, conn)
+	ctx = a.wsWatcher.Watch(ctx, logger, conn)
 
 	handler := NewHandler(logger, a.opts...)
 
@@ -98,7 +94,7 @@ func (a *API) handleWatch(rw http.ResponseWriter, r *http.Request) {
 		}
 		if err := stream.Send(*msg); err != nil {
 			logger.Debug(ctx, "failed to send changes", slog.Error(err))
-			cancel()
+			_ = conn.Close(websocket.StatusGoingAway, "send failed")
 		}
 	}
 

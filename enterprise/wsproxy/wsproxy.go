@@ -133,7 +133,7 @@ type Server struct {
 	Logger             slog.Logger
 	TracerProvider     trace.TracerProvider
 	PrometheusRegistry *prometheus.Registry
-	HeartbeatCloser    *httpapi.HeartbeatCloser
+	WSWatcher          *httpapi.WSWatcher
 
 	// SDKClient is a client to the primary coderd instance authenticated with
 	// the moon's token.
@@ -213,10 +213,16 @@ func New(ctx context.Context, opts *Options) (*Server, error) {
 		}
 	})
 
-	heartbeatCloser := httpapi.NewHeartbeatCloser()
+	var wsMetrics *httpmw.WSMetrics
 	if opts.PrometheusRegistry != nil {
+		wsMetrics = httpmw.NewWSMetrics(opts.PrometheusRegistry)
 		opts.PrometheusRegistry.MustRegister(derpmetrics.NewDERPExpvarCollector(derpServer))
 	}
+	var wsRec httpapi.ProbeRecorder
+	if wsMetrics != nil {
+		wsRec = wsMetrics.RecordProbe
+	}
+	wsWatcher := httpapi.NewWSWatcher(wsRec)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -250,7 +256,7 @@ func New(ctx context.Context, opts *Options) (*Server, error) {
 		Logger:                   opts.Logger.Named("net.workspace-proxy"),
 		TracerProvider:           opts.Tracing,
 		PrometheusRegistry:       opts.PrometheusRegistry,
-		HeartbeatCloser:          heartbeatCloser,
+		WSWatcher:                wsWatcher,
 		SDKClient:                client,
 		derpMesh:                 derpmesh.New(opts.Logger.Named("net.derpmesh"), derpServer, meshTLSConfig),
 		derpMeshTLSConfig:        meshTLSConfig,
@@ -336,7 +342,7 @@ func New(ctx context.Context, opts *Options) (*Server, error) {
 		AgentProvider:            agentProvider,
 		StatsCollector:           workspaceapps.NewStatsCollector(opts.StatsCollectorOptions),
 		APIKeyEncryptionKeycache: encryptionCache,
-		HeartbeatCloser:          heartbeatCloser,
+		WSWatcher:                wsWatcher,
 	})
 
 	derpHandler := derphttp.Handler(derpServer)
@@ -345,7 +351,7 @@ func New(ctx context.Context, opts *Options) (*Server, error) {
 	// The primary coderd dashboard needs to make some GET requests to
 	// the workspace proxies to check latency.
 	corsMW := httpmw.Cors(opts.AllowAllCors, opts.DashboardURL.String())
-	prometheusMW := httpmw.Prometheus(s.PrometheusRegistry)
+	prometheusMW := httpmw.Prometheus(s.PrometheusRegistry, wsMetrics)
 
 	// Routes
 	apiRateLimiter := httpmw.RateLimit(opts.APIRateLimit, time.Minute)

@@ -110,9 +110,9 @@ type ServerOptions struct {
 	DisablePathApps bool
 	CookiesConfig   codersdk.HTTPCookieConfig
 
-	AgentProvider   AgentProvider
-	StatsCollector  *StatsCollector
-	HeartbeatCloser *httpapi.HeartbeatCloser
+	AgentProvider  AgentProvider
+	StatsCollector *StatsCollector
+	WSWatcher      *httpapi.WSWatcher
 }
 
 // Server serves workspace apps endpoints, including:
@@ -704,8 +704,7 @@ func (s *Server) proxyWorkspaceApp(rw http.ResponseWriter, r *http.Request, appT
 // @Success 101
 // @Router /api/v2/workspaceagents/{workspaceagent}/pty [get]
 func (s *Server) workspaceAgentPTY(rw http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
+	ctx := r.Context()
 
 	s.websocketWaitMutex.Lock()
 	s.websocketWaitGroup.Add(1)
@@ -766,7 +765,7 @@ func (s *Server) workspaceAgentPTY(rw http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	go s.HeartbeatCloser.HeartbeatClose(ctx, s.Logger, cancel, conn)
+	ctx = s.WSWatcher.Watch(ctx, s.Logger, conn)
 
 	ctx, wsNetConn := WebsocketNetConn(ctx, conn, websocket.MessageBinary)
 	defer wsNetConn.Close() // Also closes conn.

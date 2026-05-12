@@ -184,15 +184,12 @@ func (api *API) watchChats(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	_ = conn.CloseRead(context.Background())
 
 	ctx, wsNetConn := codersdk.WebsocketNetConn(ctx, conn, websocket.MessageText)
 	defer wsNetConn.Close()
 
-	go api.heartbeatCloser.HeartbeatClose(ctx, logger, cancel, conn)
+	ctx = api.wsWatcher.Watch(ctx, logger, conn)
 
 	// The encoder is only written from the SubscribeWithErr callback,
 	// which delivers serially per subscription. Do not add a second
@@ -208,7 +205,7 @@ func (api *API) watchChats(rw http.ResponseWriter, r *http.Request) {
 				}
 				if err := encoder.Encode(payload); err != nil {
 					logger.Debug(ctx, "failed to send chat watch event", slog.Error(err))
-					cancel()
+					_ = conn.Close(websocket.StatusGoingAway, "send failed")
 					return
 				}
 			},
@@ -2240,10 +2237,7 @@ func (api *API) watchChatGit(rw http.ResponseWriter, r *http.Request) {
 		codersdk.WorkspaceAgentGitServerMessage,
 	](clientConn, websocket.MessageText, websocket.MessageText, logger)
 
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-
-	go api.heartbeatCloser.HeartbeatClose(ctx, logger, cancel, clientConn)
+	ctx = api.wsWatcher.Watch(r.Context(), logger, clientConn)
 
 	// Proxy agent → client.
 	agentCh := agentStream.Chan()
@@ -2259,12 +2253,12 @@ func (api *API) watchChatGit(rw http.ResponseWriter, r *http.Request) {
 				return
 			case msg, ok := <-agentCh:
 				if !ok {
-					cancel()
+					_ = clientConn.Close(websocket.StatusGoingAway, "agent stream closed")
 					return
 				}
 				if err := clientStream.Send(msg); err != nil {
 					logger.Debug(ctx, "failed to forward agent message to client", slog.Error(err))
-					cancel()
+					_ = clientConn.Close(websocket.StatusGoingAway, "send failed")
 					return
 				}
 			}
@@ -2291,7 +2285,7 @@ proxyLoop:
 		}
 	}
 
-	cancel()
+	_ = clientConn.Close(websocket.StatusGoingAway, "proxy loop ended")
 	wg.Wait()
 	_ = clientStream.Close(websocket.StatusGoingAway)
 }
@@ -2394,13 +2388,10 @@ func (api *API) watchChatDesktop(rw http.ResponseWriter, r *http.Request) {
 	// No read limit — RFB framebuffer updates can be large.
 	conn.SetReadLimit(-1)
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	ctx, wsNetConn := workspaceapps.WebsocketNetConn(ctx, conn, websocket.MessageBinary)
 	defer wsNetConn.Close()
 
-	go api.heartbeatCloser.HeartbeatClose(ctx, logger, cancel, conn)
+	ctx = api.wsWatcher.Watch(ctx, logger, conn)
 
 	agentssh.Bicopy(ctx, wsNetConn, desktopConn)
 	logger.Debug(ctx, "desktop Bicopy finished")
@@ -3316,15 +3307,12 @@ func (api *API) streamChat(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	_ = conn.CloseRead(context.Background())
 
 	ctx, wsNetConn := codersdk.WebsocketNetConn(ctx, conn, websocket.MessageText)
 	defer wsNetConn.Close()
 
-	go api.heartbeatCloser.HeartbeatClose(ctx, logger, cancel, conn)
+	ctx = api.wsWatcher.Watch(ctx, logger, conn)
 
 	// Mark the chat as read when the stream connects and again
 	// when it disconnects so we avoid per-message API calls while
