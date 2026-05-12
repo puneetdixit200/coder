@@ -1,6 +1,7 @@
 package agentgit
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -81,8 +82,9 @@ func (a *API) handleWatch(rw http.ResponseWriter, r *http.Request) {
 		codersdk.WorkspaceAgentGitServerMessage,
 	](conn, websocket.MessageText, websocket.MessageText, logger)
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	ctx = a.wsWatcher.Watch(ctx, logger, conn)
-
 	handler := NewHandler(logger, a.opts...)
 
 	// Scan returns nil only when no roots are subscribed; once any
@@ -94,7 +96,7 @@ func (a *API) handleWatch(rw http.ResponseWriter, r *http.Request) {
 		}
 		if err := stream.Send(*msg); err != nil {
 			logger.Debug(ctx, "failed to send changes", slog.Error(err))
-			_ = conn.Close(websocket.StatusGoingAway, "send failed")
+			cancel()
 		}
 	}
 

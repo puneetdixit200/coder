@@ -778,10 +778,13 @@ func (api *API) watchContainers(rw http.ResponseWriter, r *http.Request) {
 	// close frames.
 	_ = conn.CloseRead(context.Background())
 
-	ctx = api.wsWatcher.Watch(ctx, api.logger, conn)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	ctx, wsNetConn := codersdk.WebsocketNetConn(ctx, conn, websocket.MessageText)
 	defer wsNetConn.Close()
+
+	ctx = api.wsWatcher.Watch(ctx, api.logger, conn)
 
 	updateCh := make(chan struct{}, 1)
 

@@ -2230,7 +2230,9 @@ func (api *API) watchAllWorkspaceBuilds(rw http.ResponseWriter, r *http.Request)
 	// including Pong messages sent in response to our Ping heartbeats.
 	_ = conn.CloseRead(context.Background())
 
+	ctx, cancel := context.WithCancel(ctx)
 	ctx = api.wsWatcher.Watch(ctx, api.Logger, conn)
+	defer cancel()
 
 	enc := wsjson.NewEncoder[codersdk.WorkspaceBuildUpdate](conn, websocket.MessageText)
 	for {

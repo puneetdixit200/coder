@@ -499,6 +499,8 @@ func (api *API) workspaceAgentLogs(rw http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	ctx = api.wsWatcher.Watch(ctx, api.Logger, conn)
 
 	encoder := wsjson.NewEncoder[[]codersdk.WorkspaceAgentLog](conn, websocket.MessageText)
@@ -859,7 +861,8 @@ func (api *API) watchWorkspaceAgentContainers(rw http.ResponseWriter, r *http.Re
 		return
 	}
 
-	ctx = r.Context()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	// Here we close the websocket for reading, so that the websocket library will handle pings and
 	// close frames.
@@ -2289,6 +2292,8 @@ func (api *API) tailnetRPCConn(rw http.ResponseWriter, r *http.Request) {
 		})
 	}()
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	ctx = api.wsWatcher.Watch(ctx, api.Logger, conn)
 	err = api.TailnetClientService.ServeClient(ctx, version, wsNetConn, tailnet.StreamID{
 		Name: "client",

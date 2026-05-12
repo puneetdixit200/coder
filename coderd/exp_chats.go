@@ -184,6 +184,9 @@ func (api *API) watchChats(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	_ = conn.CloseRead(context.Background())
 
 	ctx, wsNetConn := codersdk.WebsocketNetConn(ctx, conn, websocket.MessageText)
@@ -205,7 +208,7 @@ func (api *API) watchChats(rw http.ResponseWriter, r *http.Request) {
 				}
 				if err := encoder.Encode(payload); err != nil {
 					logger.Debug(ctx, "failed to send chat watch event", slog.Error(err))
-					_ = conn.Close(websocket.StatusGoingAway, "send failed")
+					cancel()
 					return
 				}
 			},
@@ -2237,7 +2240,9 @@ func (api *API) watchChatGit(rw http.ResponseWriter, r *http.Request) {
 		codersdk.WorkspaceAgentGitServerMessage,
 	](clientConn, websocket.MessageText, websocket.MessageText, logger)
 
-	ctx = api.wsWatcher.Watch(r.Context(), logger, clientConn)
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	ctx = api.wsWatcher.Watch(ctx, logger, clientConn)
 
 	// Proxy agent → client.
 	agentCh := agentStream.Chan()
@@ -2253,12 +2258,12 @@ func (api *API) watchChatGit(rw http.ResponseWriter, r *http.Request) {
 				return
 			case msg, ok := <-agentCh:
 				if !ok {
-					_ = clientConn.Close(websocket.StatusGoingAway, "agent stream closed")
+					cancel()
 					return
 				}
 				if err := clientStream.Send(msg); err != nil {
 					logger.Debug(ctx, "failed to forward agent message to client", slog.Error(err))
-					_ = clientConn.Close(websocket.StatusGoingAway, "send failed")
+					cancel()
 					return
 				}
 			}
@@ -2285,7 +2290,7 @@ proxyLoop:
 		}
 	}
 
-	_ = clientConn.Close(websocket.StatusGoingAway, "proxy loop ended")
+	cancel()
 	wg.Wait()
 	_ = clientStream.Close(websocket.StatusGoingAway)
 }
@@ -2387,6 +2392,9 @@ func (api *API) watchChatDesktop(rw http.ResponseWriter, r *http.Request) {
 
 	// No read limit — RFB framebuffer updates can be large.
 	conn.SetReadLimit(-1)
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	ctx, wsNetConn := workspaceapps.WebsocketNetConn(ctx, conn, websocket.MessageBinary)
 	defer wsNetConn.Close()
@@ -3306,6 +3314,9 @@ func (api *API) streamChat(rw http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	_ = conn.CloseRead(context.Background())
 
