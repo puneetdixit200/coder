@@ -214,7 +214,8 @@ describe("deriveMessageDisplayState", () => {
 		);
 
 		expect(
-			getDisplayState(message, { hideActions: true }).needsAssistantBottomSpacer,
+			getDisplayState(message, { hideActions: true })
+				.needsAssistantBottomSpacer,
 		).toBe(false);
 	});
 

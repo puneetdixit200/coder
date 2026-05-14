@@ -166,6 +166,7 @@ export const groupSequentialReadFileMessages = (
 			message: entry.message,
 			parsed: entry.parsed,
 			hideActions: false,
+			hasActiveStream: false,
 		});
 		if (displayState.shouldHide) {
 			continue;
