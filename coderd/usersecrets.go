@@ -3,6 +3,7 @@ package coderd
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -16,8 +17,12 @@ import (
 	"github.com/coder/coder/v2/coderd/database/db2sdk"
 	"github.com/coder/coder/v2/coderd/httpapi"
 	"github.com/coder/coder/v2/coderd/httpmw"
+	"github.com/coder/coder/v2/coderd/rbac"
+	"github.com/coder/coder/v2/coderd/rbac/policy"
 	"github.com/coder/coder/v2/coderd/usersecretspubsub"
 	"github.com/coder/coder/v2/codersdk"
+	"github.com/coder/coder/v2/codersdk/wsjson"
+	"github.com/coder/websocket"
 )
 
 const (
@@ -389,6 +394,81 @@ func userSecretConflictValidationErrors(err error) []codersdk.ValidationError {
 		}}
 	default:
 		return nil
+	}
+}
+
+// @Summary Watch user secret changes
+// @ID watch-user-secret-changes
+// @Security CoderSessionToken
+// @Produce json
+// @Tags Secrets
+// @Param user path string true "User ID, username, or me"
+// @Success 101 {object} codersdk.UserSecretEvent
+// @Router /api/v2/users/{user}/secrets/-/watch [get]
+func (api *API) watchUserSecrets(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user := httpmw.UserParam(r)
+	if !api.Authorize(r, policy.ActionRead, rbac.ResourceUserSecret.WithOwner(user.ID.String())) {
+		httpapi.Forbidden(rw)
+		return
+	}
+
+	events := make(chan codersdk.UserSecretEvent, 16)
+	cancelSubscribe, err := api.Pubsub.Subscribe(usersecretspubsub.Channel(user.ID), func(ctx context.Context, msg []byte) {
+		var event codersdk.UserSecretEvent
+		if err := json.Unmarshal(msg, &event); err != nil {
+			api.Logger.Warn(ctx, "failed to unmarshal user secret event",
+				slog.F("user_id", user.ID),
+				slog.Error(err),
+			)
+			return
+		}
+
+		select {
+		case events <- event:
+		default:
+			api.Logger.Warn(ctx, "user secret event dropped, client too slow",
+				slog.F("user_id", user.ID),
+				slog.F("event_kind", event.Kind),
+			)
+		}
+	})
+	if err != nil {
+		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+			Message: "Internal error subscribing to user secret events.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	defer cancelSubscribe()
+
+	conn, err := websocket.Accept(rw, r, nil)
+	if err != nil {
+		httpapi.Write(ctx, rw, http.StatusUpgradeRequired, codersdk.Response{
+			Message: "Failed to accept WebSocket.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "done")
+	_ = conn.CloseRead(context.Background())
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go httpapi.HeartbeatClose(ctx, api.Logger, cancel, conn)
+
+	encoder := wsjson.NewEncoder[codersdk.UserSecretEvent](conn, websocket.MessageText)
+	for {
+		select {
+		case <-api.ctx.Done():
+			return
+		case <-ctx.Done():
+			return
+		case event := <-events:
+			if err := encoder.Encode(event); err != nil {
+				return
+			}
+		}
 	}
 }
 

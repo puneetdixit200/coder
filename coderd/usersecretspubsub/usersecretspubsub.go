@@ -8,23 +8,18 @@ import (
 	"golang.org/x/xerrors"
 
 	"github.com/coder/coder/v2/coderd/database/pubsub"
+	"github.com/coder/coder/v2/codersdk"
 )
 
-type EventKind string
+type EventKind = codersdk.UserSecretEventKind
 
 const (
-	EventKindCreated EventKind = "created"
-	EventKindUpdated EventKind = "updated"
-	EventKindDeleted EventKind = "deleted"
+	EventKindCreated EventKind = codersdk.UserSecretEventKindCreated
+	EventKindUpdated EventKind = codersdk.UserSecretEventKindUpdated
+	EventKindDeleted EventKind = codersdk.UserSecretEventKindDeleted
 )
 
-type Event struct {
-	Kind     EventKind `json:"kind"`
-	UserID   uuid.UUID `json:"user_id" format:"uuid"`
-	Name     string    `json:"name"`
-	EnvName  string    `json:"env_name,omitempty"`
-	FilePath string    `json:"file_path,omitempty"`
-}
+type Event = codersdk.UserSecretEvent
 
 func Channel(userID uuid.UUID) string {
 	return fmt.Sprintf("user_secrets:%s", userID)

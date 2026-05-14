@@ -26,11 +26,9 @@ const meta: Meta<typeof SecretsPageView> = {
 		secrets: visibleSecrets,
 		isLoading: false,
 		hasLoaded: true,
-		isRefreshing: false,
 		isCreating: false,
 		isUpdating: false,
 		isDeleting: false,
-		onRefresh: fn(),
 		onCreateSecret: fn(),
 		onUpdateSecret: fn(),
 		onDeleteSecret: fn(),
@@ -113,23 +111,6 @@ export const Loading: Story = {
 		secrets: [],
 		isLoading: true,
 		hasLoaded: false,
-	},
-};
-
-export const RefreshingWithRows: Story = {
-	args: {
-		secrets: visibleSecrets,
-		isLoading: false,
-		hasLoaded: true,
-		isRefreshing: true,
-	},
-	play: async ({ canvasElement }) => {
-		const canvas = within(canvasElement);
-
-		await expect(canvas.getAllByText(visibleSecrets[0].name)[0]).toBeVisible();
-		await expect(
-			canvas.getByRole("button", { name: /Refresh/ }),
-		).toBeDisabled();
 	},
 };
 

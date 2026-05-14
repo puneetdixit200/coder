@@ -1,4 +1,4 @@
-import { PlusIcon, RefreshCwIcon } from "lucide-react";
+import { PlusIcon } from "lucide-react";
 import { type FC, useState } from "react";
 import type {
 	CreateUserSecretRequest,
@@ -14,7 +14,6 @@ import {
 	SettingsHeaderDescription,
 	SettingsHeaderTitle,
 } from "#/components/SettingsHeader/SettingsHeader";
-import { Spinner } from "#/components/Spinner/Spinner";
 import { docs } from "#/utils/docs";
 import { SecretDialog } from "./SecretDialog";
 import { SecretsTable } from "./SecretsTable";
@@ -23,12 +22,10 @@ type SecretsPageViewProps = {
 	secrets?: readonly UserSecret[];
 	isLoading: boolean;
 	hasLoaded: boolean;
-	isRefreshing: boolean;
 	isCreating: boolean;
 	isUpdating: boolean;
 	isDeleting: boolean;
 	getSecretsError?: unknown;
-	onRefresh: () => void;
 	onCreateSecret: (
 		request: CreateUserSecretRequest,
 	) => Promise<unknown> | unknown;
@@ -43,12 +40,10 @@ export const SecretsPageView: FC<SecretsPageViewProps> = ({
 	secrets = [],
 	isLoading,
 	hasLoaded,
-	isRefreshing,
 	isCreating,
 	isUpdating,
 	isDeleting,
 	getSecretsError,
-	onRefresh,
 	onCreateSecret,
 	onUpdateSecret,
 	onDeleteSecret,
@@ -58,22 +53,7 @@ export const SecretsPageView: FC<SecretsPageViewProps> = ({
 
 	return (
 		<div className="flex flex-col gap-6">
-			<SettingsHeader
-				actions={
-					<div className="flex flex-wrap gap-2">
-						<Button
-							variant="outline"
-							onClick={onRefresh}
-							disabled={isRefreshing}
-						>
-							<Spinner loading={isRefreshing}>
-								<RefreshCwIcon />
-							</Spinner>
-							Refresh
-						</Button>
-					</div>
-				}
-			>
+			<SettingsHeader>
 				<SettingsHeaderTitle
 					tooltip={<FeatureStageBadge contentType="early_access" size="md" />}
 				>

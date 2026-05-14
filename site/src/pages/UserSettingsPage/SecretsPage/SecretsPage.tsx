@@ -1,6 +1,7 @@
-import { type FC, useCallback } from "react";
+import { type FC, useCallback, useEffect, useEffectEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import { toast } from "sonner";
+import { watchUserSecrets } from "#/api/api";
 import { getErrorDetail, getErrorMessage } from "#/api/errors";
 import {
 	createUserSecret,
@@ -14,6 +15,7 @@ import type {
 	UserSecret,
 } from "#/api/typesGenerated";
 import { useAuthenticated } from "#/hooks/useAuthenticated";
+import { createReconnectingWebSocket } from "#/utils/reconnectingWebSocket";
 import { SecretsPageView } from "./SecretsPageView";
 
 const SecretsPage: FC = () => {
@@ -30,6 +32,35 @@ const SecretsPage: FC = () => {
 	const deleteSecretMutation = useMutation(
 		deleteUserSecret(queryClient, me.id),
 	);
+
+	const invalidateSecrets = useEffectEvent(() => {
+		void queryClient.invalidateQueries({
+			queryKey: secretsQueryOptions.queryKey,
+		});
+	});
+
+	useEffect(() => {
+		return createReconnectingWebSocket({
+			connect: () => {
+				const socket = watchUserSecrets(me.id);
+				socket.addEventListener("message", (event) => {
+					if (event.parseError) {
+						toast.error("Unable to process latest secrets update.", {
+							description: "Please try refreshing the browser.",
+						});
+						return;
+					}
+
+					if (event.parsedMessage.user_id !== me.id) {
+						return;
+					}
+					invalidateSecrets();
+				});
+				return socket;
+			},
+			onOpen: () => invalidateSecrets(),
+		});
+	}, [me.id]);
 
 	const onMutationError = useCallback(
 		(error: unknown, defaultMessage: string) => {
@@ -98,16 +129,10 @@ const SecretsPage: FC = () => {
 			secrets={secretsQuery.data}
 			isLoading={!secretsQuery.isFetched && secretsQuery.isFetching}
 			hasLoaded={secretsQuery.isFetched}
-			isRefreshing={secretsQuery.isFetching && secretsQuery.isFetched}
 			isCreating={createSecretMutation.isPending}
 			isUpdating={updateSecretMutation.isPending}
 			isDeleting={deleteSecretMutation.isPending}
 			getSecretsError={secretsQuery.error}
-			onRefresh={() => {
-				void queryClient.invalidateQueries({
-					queryKey: secretsQueryOptions.queryKey,
-				});
-			}}
 			onCreateSecret={onCreateSecret}
 			onUpdateSecret={onUpdateSecret}
 			onDeleteSecret={onDeleteSecret}
