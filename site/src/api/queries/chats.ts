@@ -23,6 +23,80 @@ export const chatMessagesKey = (chatId: string) =>
 export const chatPromptsKey = (chatId: string) =>
 	["chats", chatId, "prompts"] as const;
 
+export type ChatListPRStatusFilter = "draft" | "open" | "merged" | "closed";
+
+export type InfiniteChatsFilters = Readonly<{
+	archived?: boolean;
+	prStatuses?: readonly ChatListPRStatusFilter[];
+	unreadOnly?: boolean;
+}>;
+
+const CHAT_LIST_PR_STATUS_ORDER = [
+	"draft",
+	"open",
+	"merged",
+	"closed",
+] as const satisfies readonly ChatListPRStatusFilter[];
+
+const chatListPRStatusSet = new Set<ChatListPRStatusFilter>(
+	CHAT_LIST_PR_STATUS_ORDER,
+);
+
+type InfiniteChatsCacheData = InfiniteData<TypesGen.Chat[]>;
+type ChatListCacheData = TypesGen.Chat[] | InfiniteChatsCacheData;
+
+type InfiniteChatsOptions = InfiniteChatsFilters &
+	Readonly<{
+		groupBy?: string;
+		q?: string;
+	}>;
+
+const normalizeInfiniteChatsPRStatuses = (
+	prStatuses: unknown,
+): readonly ChatListPRStatusFilter[] | undefined => {
+	if (!Array.isArray(prStatuses)) {
+		return undefined;
+	}
+
+	const selected = new Set<ChatListPRStatusFilter>();
+	for (const prStatus of prStatuses) {
+		if (
+			typeof prStatus === "string" &&
+			chatListPRStatusSet.has(prStatus as ChatListPRStatusFilter)
+		) {
+			selected.add(prStatus as ChatListPRStatusFilter);
+		}
+	}
+
+	const normalized = CHAT_LIST_PR_STATUS_ORDER.filter((status) =>
+		selected.has(status),
+	);
+	return normalized.length > 0 ? normalized : undefined;
+};
+
+const normalizeInfiniteChatsFilters = (
+	filters?: InfiniteChatsOptions | null,
+): InfiniteChatsFilters | undefined => {
+	const archived =
+		typeof filters?.archived === "boolean" ? filters.archived : undefined;
+	const prStatuses = normalizeInfiniteChatsPRStatuses(filters?.prStatuses);
+	const unreadOnly = filters?.unreadOnly === true ? true : undefined;
+
+	if (
+		archived === undefined &&
+		prStatuses === undefined &&
+		unreadOnly === undefined
+	) {
+		return undefined;
+	}
+
+	return {
+		...(archived !== undefined ? { archived } : {}),
+		...(prStatuses !== undefined ? { prStatuses } : {}),
+		...(unreadOnly ? { unreadOnly } : {}),
+	};
+};
+
 export const chatsByWorkspaceKeyPrefix = [...chatsKey, "by-workspace"] as const;
 
 export const chatsByWorkspace = (workspaceIds: string[]) => {
@@ -44,62 +118,67 @@ export const updateInfiniteChatsCache = (
 	updater: (chats: TypesGen.Chat[]) => TypesGen.Chat[],
 ) => {
 	// Update ALL infinite chat queries regardless of their filter opts.
-	queryClient.setQueriesData<{
-		pages: TypesGen.Chat[][];
-		pageParams: unknown[];
-	}>({ queryKey: chatsKey, predicate: isChatListQuery }, (prev) => {
-		if (!prev) return prev;
-		if (!prev.pages) return prev;
-		const nextPages = prev.pages.map((page) => updater(page));
-		// Only return a new reference if something actually changed.
-		const changed = nextPages.some((page, i) => page !== prev.pages[i]);
-		return changed ? { ...prev, pages: nextPages } : prev;
-	});
-};
-
-/**
- * Prepends a new chat to the first page of every infinite chats query
- * in the cache, but only if the chat doesn't already exist in any
- * page. This avoids the per-page duplication that would occur if
- * a prepend updater were passed to updateInfiniteChatsCache, which
- * runs independently on each page.
- */
-export const prependToInfiniteChatsCache = (
-	queryClient: QueryClient,
-	chat: TypesGen.Chat,
-) => {
-	queryClient.setQueriesData<{
-		pages: TypesGen.Chat[][];
-		pageParams: unknown[];
-	}>({ queryKey: chatsKey, predicate: isChatListQuery }, (prev) => {
-		if (!prev?.pages) return prev;
-		// Check across ALL pages to avoid duplicates.
-		const exists = prev.pages.some((page) =>
-			page.some((c) => c.id === chat.id),
-		);
-		if (exists) return prev;
-		// Only prepend to the first page.
-		const nextPages = prev.pages.map((page, i) =>
-			i === 0 ? [chat, ...page] : page,
-		);
-		return { ...prev, pages: nextPages };
-	});
+	queryClient.setQueriesData<InfiniteChatsCacheData>(
+		{ queryKey: chatsKey, predicate: isChatListQuery },
+		(prev) => {
+			if (!prev?.pages) return prev;
+			const nextPages = prev.pages.map((page) => updater(page));
+			// Only return a new reference if something actually changed.
+			const changed = nextPages.some((page, i) => page !== prev.pages[i]);
+			return changed ? { ...prev, pages: nextPages } : prev;
+		},
+	);
 };
 
 /**
  * Reads the flat list of chats from the first matching infinite query
  * in the cache. Returns undefined when no data is cached yet.
  */
-export const readInfiniteChatsCache = (
+const readInfiniteChatsCache = (
 	queryClient: QueryClient,
 ): TypesGen.Chat[] | undefined => {
-	const queries = queryClient.getQueriesData<{
-		pages: TypesGen.Chat[][];
-		pageParams: unknown[];
-	}>({ queryKey: chatsKey, predicate: isChatListQuery });
+	const queries = queryClient.getQueriesData<ChatListCacheData>({
+		queryKey: chatsKey,
+		predicate: isChatListQuery,
+	});
 	for (const [, data] of queries) {
-		if (data?.pages) {
+		if (!data) {
+			continue;
+		}
+		if (Array.isArray(data)) {
+			return data;
+		}
+		if (data.pages) {
 			return data.pages.flat();
+		}
+	}
+	return undefined;
+};
+
+export const findChatInInfiniteChatsCaches = (
+	queryClient: QueryClient,
+	chatId: string,
+): TypesGen.Chat | undefined => {
+	const queries = queryClient.getQueriesData<ChatListCacheData>({
+		queryKey: chatsKey,
+		predicate: isChatListQuery,
+	});
+	for (const [, data] of queries) {
+		if (!data) {
+			continue;
+		}
+		if (Array.isArray(data)) {
+			const chat = data.find((candidate) => candidate.id === chatId);
+			if (chat) {
+				return chat;
+			}
+			continue;
+		}
+		for (const page of data.pages) {
+			const chat = page.find((candidate) => candidate.id === chatId);
+			if (chat) {
+				return chat;
+			}
 		}
 	}
 	return undefined;
@@ -418,11 +497,39 @@ const isChatListQuery = (query: { queryKey: readonly unknown[] }): boolean => {
 	return segment === undefined || typeof segment === "object";
 };
 
-export const invalidateChatListQueries = (queryClient: QueryClient) => {
+export const getInfiniteChatsFiltersFromQueryKey = (
+	queryKey: readonly unknown[],
+): InfiniteChatsFilters | undefined => {
+	if (!isChatListQuery({ queryKey })) {
+		return undefined;
+	}
+	if (queryKey.length <= 1) {
+		return undefined;
+	}
+	const segment = queryKey[1];
+	if (segment === undefined || typeof segment !== "object") {
+		return undefined;
+	}
+	return normalizeInfiniteChatsFilters(segment as InfiniteChatsOptions);
+};
+
+export const invalidateChatListQueriesWhere = (
+	queryClient: QueryClient,
+	predicate: (filters: InfiniteChatsFilters | undefined) => boolean,
+) => {
 	return queryClient.invalidateQueries({
 		queryKey: chatsKey,
-		predicate: isChatListQuery,
+		predicate: (query) => {
+			if (!isChatListQuery(query)) {
+				return false;
+			}
+			return predicate(getInfiniteChatsFiltersFromQueryKey(query.queryKey));
+		},
 	});
+};
+
+export const invalidateChatListQueries = (queryClient: QueryClient) => {
+	return invalidateChatListQueriesWhere(queryClient, () => true);
 };
 
 /**
@@ -499,21 +606,67 @@ const toChatPlanModePayload = (
 	return planMode ?? CLEAR_PLAN_MODE_WIRE_VALUE;
 };
 
-export const infiniteChats = (opts?: { q?: string; archived?: boolean }) => {
-	const limit = DEFAULT_CHAT_PAGE_LIMIT;
-
-	// Build the search query string including the archived filter.
+const getInfiniteChatsQueryString = (
+	filters: InfiniteChatsFilters | undefined,
+): string | undefined => {
 	const qParts: string[] = [];
-	if (opts?.q) {
-		qParts.push(opts.q);
+	if (filters?.archived !== undefined) {
+		qParts.push(`archived:${filters.archived}`);
 	}
-	if (opts?.archived !== undefined) {
-		qParts.push(`archived:${opts.archived}`);
+	if (filters?.prStatuses?.length) {
+		qParts.push(`pr_status:${filters.prStatuses.join(",")}`);
 	}
-	const q = qParts.length > 0 ? qParts.join(" ") : undefined;
+	if (filters?.unreadOnly) {
+		qParts.push("chat_status:unread");
+	}
+	return qParts.length > 0 ? qParts.join(" ") : undefined;
+};
+
+const getChatPRStatusFilter = (
+	chat: TypesGen.Chat,
+): ChatListPRStatusFilter | undefined => {
+	const prState = chat.diff_status?.pull_request_state;
+	if (!prState) {
+		return undefined;
+	}
+	if (prState === "open" && chat.diff_status?.pull_request_draft) {
+		return "draft";
+	}
+	if (prState === "open" || prState === "merged" || prState === "closed") {
+		return prState;
+	}
+	return undefined;
+};
+
+export const chatMatchesInfiniteChatsFilters = (
+	chat: TypesGen.Chat,
+	filters: InfiniteChatsFilters | undefined,
+): boolean => {
+	if (chat.parent_chat_id) {
+		return false;
+	}
+	if (filters?.archived !== undefined && chat.archived !== filters.archived) {
+		return false;
+	}
+	if (filters?.unreadOnly && !chat.has_unread) {
+		return false;
+	}
+	if (filters?.prStatuses?.length) {
+		const prStatus = getChatPRStatusFilter(chat);
+		if (!prStatus || !filters.prStatuses.includes(prStatus)) {
+			return false;
+		}
+	}
+	return true;
+};
+
+export const infiniteChats = (opts?: InfiniteChatsOptions) => {
+	const limit = DEFAULT_CHAT_PAGE_LIMIT;
+	const filters = normalizeInfiniteChatsFilters(opts);
+	const q = getInfiniteChatsQueryString(filters);
 
 	return {
-		queryKey: [...chatsKey, opts],
+		queryKey: [...chatsKey, filters],
 		getNextPageParam: (lastPage: TypesGen.Chat[], pages: TypesGen.Chat[][]) => {
 			if (lastPage.length < limit) {
 				return undefined;

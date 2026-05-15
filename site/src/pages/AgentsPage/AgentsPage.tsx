@@ -1,5 +1,6 @@
 import { type FC, useEffect, useRef, useState } from "react";
 import {
+	type QueryClient,
 	useInfiniteQuery,
 	useMutation,
 	useQuery,
@@ -15,16 +16,20 @@ import {
 	cancelChatListRefetches,
 	chatDiffContentsKey,
 	chatKey,
+	chatMatchesInfiniteChatsFilters,
 	chatModelConfigs,
 	chatModels,
 	chatsByWorkspaceKeyPrefix,
+	chatsKey,
+	findChatInInfiniteChatsCaches,
+	getInfiniteChatsFiltersFromQueryKey,
+	type InfiniteChatsFilters,
 	infiniteChats,
 	invalidateChatListQueries,
+	invalidateChatListQueriesWhere,
 	mergeWatchedChatIntoCaches,
 	pinChat,
-	prependToInfiniteChatsCache,
 	proposeChatTitle,
-	readInfiniteChatsCache,
 	regenerateChatTitle,
 	removeChildFromParentInCache,
 	reorderPinnedChat,
@@ -42,9 +47,9 @@ import { useAuthenticated } from "#/hooks/useAuthenticated";
 import { createReconnectingWebSocket } from "#/utils/reconnectingWebSocket";
 import { AgentsPageView } from "./AgentsPageView";
 import { emptyInputStorageKey } from "./components/AgentCreateForm";
+import { useAgentSidebarFilters } from "./hooks/useAgentSidebarFilters";
 import { useAgentsPageKeybindings } from "./hooks/useAgentsPageKeybindings";
 import { useAgentsPWA } from "./hooks/useAgentsPWA";
-import { useArchivedFilterParam } from "./hooks/useArchivedFilterParam";
 import {
 	archiveChatAndDeleteWorkspace,
 	resolveArchiveAndDeleteAction,
@@ -60,6 +65,105 @@ import {
 
 export type { AgentsOutletContext } from "./AgentsPageView";
 
+type ChatListCache = {
+	pages: TypesGen.Chat[][];
+	pageParams: unknown[];
+};
+
+const UNREAD_MEMBERSHIP_EVENT_KINDS = new Set<TypesGen.ChatWatchEventKind>([
+	"action_required",
+	"created",
+	"status_change",
+]);
+
+const filterMatchesKnownArchiveState = (
+	filters: InfiniteChatsFilters | undefined,
+	chat: TypesGen.Chat,
+): boolean => {
+	return filters?.archived === undefined || filters.archived === chat.archived;
+};
+
+const shouldInvalidateUnreadFilters = (
+	chat: TypesGen.Chat,
+	eventKind: TypesGen.ChatWatchEventKind,
+): boolean => {
+	if (chat.parent_chat_id) {
+		return false;
+	}
+	return UNREAD_MEMBERSHIP_EVENT_KINDS.has(eventKind);
+};
+
+const shouldInvalidatePRFilters = (
+	chat: TypesGen.Chat,
+	eventKind: TypesGen.ChatWatchEventKind,
+): boolean => {
+	return !chat.parent_chat_id && eventKind === "diff_status_change";
+};
+
+const removeChatFromUnreadFilteredCaches = (
+	queryClient: QueryClient,
+	chatId: string,
+) => {
+	queryClient.setQueriesData<ChatListCache>(
+		{
+			queryKey: chatsKey,
+			predicate: (query) =>
+				getInfiniteChatsFiltersFromQueryKey(query.queryKey)?.unreadOnly ===
+				true,
+		},
+		(prev) => {
+			if (!prev?.pages) {
+				return prev;
+			}
+			let changed = false;
+			const nextPages = prev.pages.map((page) => {
+				const nextPage = page.filter((chat) => chat.id !== chatId);
+				if (nextPage.length !== page.length) {
+					changed = true;
+				}
+				return nextPage;
+			});
+			return changed ? { ...prev, pages: nextPages } : prev;
+		},
+	);
+};
+
+const prependRootChatToMatchingCaches = (
+	queryClient: QueryClient,
+	chat: TypesGen.Chat,
+) => {
+	queryClient.setQueriesData<ChatListCache>(
+		{
+			queryKey: chatsKey,
+			predicate: (query) => {
+				const filters = getInfiniteChatsFiltersFromQueryKey(query.queryKey);
+				return (
+					chatMatchesInfiniteChatsFilters(chat, filters) &&
+					(filters?.prStatuses?.length ?? 0) === 0 &&
+					!filters?.unreadOnly
+				);
+			},
+		},
+		(prev) => {
+			if (!prev?.pages) {
+				return prev;
+			}
+			const exists = prev.pages.some((page) =>
+				page.some((c) => c.id === chat.id),
+			);
+			if (exists) {
+				return prev;
+			}
+			return {
+				...prev,
+				pages: prev.pages.map((page, index) =>
+					index === 0 ? [chat, ...page] : page,
+				),
+			};
+		},
+	);
+};
+
 const AgentsPage: FC = () => {
 	useAgentsPWA();
 	const queryClient = useQueryClient();
@@ -69,7 +173,8 @@ const AgentsPage: FC = () => {
 	const { permissions } = useAuthenticated();
 	const isAgentsAdmin = permissions.editDeploymentConfig;
 
-	const [archivedFilter, setArchivedFilter] = useArchivedFilterParam();
+	const [sidebarFilters, setSidebarFilters, clearSidebarFilters] =
+		useAgentSidebarFilters();
 
 	// The global CSS sets scrollbar-gutter: stable on <html> to prevent
 	// layout shift on pages that toggle scrollbars. The agents page
@@ -115,7 +220,11 @@ const AgentsPage: FC = () => {
 	}, []);
 
 	const chatsQuery = useInfiniteQuery(
-		infiniteChats({ archived: archivedFilter === "archived" }),
+		infiniteChats({
+			archived: sidebarFilters.archived === "archived",
+			prStatuses: sidebarFilters.prStatuses,
+			unreadOnly: sidebarFilters.unreadOnly,
+		}),
 	);
 	// Model queries are kept here for the sidebar, which displays
 	// model info alongside each chat. Child routes that need models
@@ -353,9 +462,7 @@ const AgentsPage: FC = () => {
 						],
 						queryFn: () => API.getWorkspaceBuilds(workspaceId),
 					}),
-				() =>
-					readInfiniteChatsCache(queryClient)?.find((c) => c.id === chatId)
-						?.created_at,
+				() => findChatInInfiniteChatsCaches(queryClient, chatId)?.created_at,
 			);
 			if (action === "proceed") {
 				archiveAndDeleteMutation.mutate(
@@ -497,6 +604,7 @@ const AgentsPage: FC = () => {
 			});
 			return changed ? next : chats;
 		});
+		removeChatFromUnreadFilteredCaches(queryClient, agentId);
 	}, [agentId, queryClient]);
 	useEffect(() => {
 		return createReconnectingWebSocket({
@@ -510,13 +618,11 @@ const AgentsPage: FC = () => {
 					}
 					const chatEvent = event.parsedMessage;
 					const updatedChat = chatEvent.chat;
-					// Read the previous status from the infinite chat list
-					// cache before we write the update below. The per-chat
-					// query cache (chatKey) only exists for chats the user
-					// has opened, so reading from the list cache ensures
-					// prevStatus is available for background agents too.
-					const prevStatus = readInfiniteChatsCache(queryClient)?.find(
-						(c) => c.id === updatedChat.id,
+					// Read the previous status from the cached root lists
+					// before we write the update below.
+					const prevStatus = findChatInInfiniteChatsCaches(
+						queryClient,
+						updatedChat.id,
 					)?.status;
 					// Only play the chime for top-level chats, not sub-agents.
 					if (!updatedChat.parent_chat_id) {
@@ -578,11 +684,6 @@ const AgentsPage: FC = () => {
 						});
 					}
 
-					// For "created" events, use a cross-page existence
-					// check and prepend only to the first page.
-					// updateInfiniteChatsCache runs the updater per
-					// page, so a naive prepend would duplicate the
-					// chat into every loaded page.
 					if (chatEvent.kind === "created") {
 						if (updatedChat.parent_chat_id) {
 							// Child chat: add to its parent's children
@@ -594,13 +695,42 @@ const AgentsPage: FC = () => {
 								updatedChat.parent_chat_id,
 							);
 						} else {
-							prependToInfiniteChatsCache(queryClient, updatedChat);
+							prependRootChatToMatchingCaches(queryClient, updatedChat);
+							void invalidateChatListQueriesWhere(queryClient, (filters) => {
+								if (!filterMatchesKnownArchiveState(filters, updatedChat)) {
+									return false;
+								}
+								return (
+									(filters?.prStatuses?.length ?? 0) > 0 ||
+									filters?.unreadOnly === true
+								);
+							});
 						}
 					} else {
 						mergeWatchedChatIntoCaches(queryClient, updatedChat, {
 							eventKind: chatEvent.kind,
 							activeChatId: activeChatIDRef.current,
 						});
+						if (shouldInvalidatePRFilters(updatedChat, chatEvent.kind)) {
+							void invalidateChatListQueriesWhere(queryClient, (filters) => {
+								if (!filterMatchesKnownArchiveState(filters, updatedChat)) {
+									return false;
+								}
+								return (filters?.prStatuses?.length ?? 0) > 0;
+							});
+						}
+						if (shouldInvalidateUnreadFilters(updatedChat, chatEvent.kind)) {
+							if (updatedChat.id === activeChatIDRef.current) {
+								removeChatFromUnreadFilteredCaches(queryClient, updatedChat.id);
+							} else {
+								void invalidateChatListQueriesWhere(queryClient, (filters) => {
+									if (!filterMatchesKnownArchiveState(filters, updatedChat)) {
+										return false;
+									}
+									return filters?.unreadOnly === true;
+								});
+							}
+						}
 					}
 				});
 				return ws;
@@ -667,8 +797,9 @@ const AgentsPage: FC = () => {
 				hasNextPage={chatsQuery.hasNextPage}
 				onLoadMore={() => void chatsQuery.fetchNextPage()}
 				isFetchingNextPage={chatsQuery.isFetchingNextPage}
-				archivedFilter={archivedFilter}
-				onArchivedFilterChange={setArchivedFilter}
+				sidebarFilters={sidebarFilters}
+				onSidebarFiltersChange={setSidebarFilters}
+				onClearSidebarFilters={clearSidebarFilters}
 			/>
 			<ConfirmDialog
 				open={pendingArchiveChatId !== null}

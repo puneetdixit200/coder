@@ -102,6 +102,7 @@ import { UserDropdownContent } from "#/modules/dashboard/Navbar/UserDropdown/Use
 import { useDashboard } from "#/modules/dashboard/useDashboard";
 import { cn } from "#/utils/cn";
 import { shortRelativeTime } from "#/utils/time";
+import type { AgentSidebarFilters } from "../../hooks/useAgentSidebarFilters";
 import { getNormalizedModelRef } from "../../utils/modelOptions";
 import { getTimeGroup, TIME_GROUPS } from "../../utils/timeGroups";
 import { asNonEmptyString } from "../ChatConversation/blockUtils";
@@ -183,8 +184,9 @@ interface AgentsSidebarProps {
 	hasNextPage?: boolean;
 	onLoadMore?: () => void;
 	isFetchingNextPage?: boolean;
-	archivedFilter: "active" | "archived";
-	onArchivedFilterChange?: (filter: "active" | "archived") => void;
+	sidebarFilters: AgentSidebarFilters;
+	onSidebarFiltersChange: (filters: AgentSidebarFilters) => void;
+	onClearSidebarFilters: () => void;
 	onCollapse?: () => void;
 	isPersonalModelOverridesEnabled?: boolean;
 	isAdmin?: boolean;
@@ -365,57 +367,16 @@ const buildChatTree = (chats: readonly Chat[]): ChatTree => {
 
 const collectVisibleChatIDs = ({
 	chats,
-	search,
-	tree,
 }: {
 	readonly chats: readonly Chat[];
-	readonly search: string;
-	readonly tree: ChatTree;
 }): Set<string> => {
-	if (!search) {
-		const allIDs = new Set(chats.map((chat) => chat.id));
-		for (const chat of chats) {
-			for (const child of chat.children ?? []) {
-				allIDs.add(child.id);
-			}
-		}
-		return allIDs;
-	}
-
-	const allChats = chats.flatMap((chat) => [chat, ...(chat.children ?? [])]);
-	const matchedChatIDs = allChats
-		.filter((chat) => chat.title.toLowerCase().includes(search))
-		.map((chat) => chat.id);
-	if (matchedChatIDs.length === 0) {
-		return new Set<string>();
-	}
-
-	const visible = new Set<string>();
-	for (const matchedChatID of matchedChatIDs) {
-		let parentCursor: string | undefined = matchedChatID;
-		const seenParents = new Set<string>();
-		while (parentCursor && !seenParents.has(parentCursor)) {
-			seenParents.add(parentCursor);
-			visible.add(parentCursor);
-			parentCursor = tree.parentById.get(parentCursor);
-		}
-
-		const stack = [matchedChatID];
-		const seenDescendants = new Set<string>();
-		while (stack.length > 0) {
-			const currentID = stack.pop();
-			if (!currentID || seenDescendants.has(currentID)) {
-				continue;
-			}
-			seenDescendants.add(currentID);
-			visible.add(currentID);
-			for (const childID of tree.childrenById.get(currentID) ?? []) {
-				stack.push(childID);
-			}
+	const allIDs = new Set(chats.map((chat) => chat.id));
+	for (const chat of chats) {
+		for (const child of chat.children ?? []) {
+			allIDs.add(child.id);
 		}
 	}
-
-	return visible;
+	return allIDs;
 };
 
 interface ChatTreeContextValue {
@@ -868,6 +829,8 @@ const SortableChatTreeNode: FC<{
 };
 
 const PINNED_SECTION_KEY = "Pinned";
+const UNREAD_SECTION_KEY = "Unread";
+const READ_SECTION_KEY = "Read";
 
 const getSectionToggleTestId = (sectionKey: string) =>
 	`agents-section-toggle-${sectionKey.replaceAll(" ", "-")}`;
@@ -940,8 +903,9 @@ export const AgentsSidebar: FC<AgentsSidebarProps> = (props) => {
 		hasNextPage,
 		onLoadMore,
 		isFetchingNextPage,
-		archivedFilter,
-		onArchivedFilterChange,
+		sidebarFilters,
+		onSidebarFiltersChange,
+		onClearSidebarFilters,
 		onCollapse,
 		isPersonalModelOverridesEnabled = false,
 		isAdmin = false,
@@ -972,6 +936,12 @@ export const AgentsSidebar: FC<AgentsSidebarProps> = (props) => {
 	const showApiKeysItem =
 		isAdmin || isApiKeysSection || Boolean(providerConfigsQuery.data?.length);
 	const normalizedSearch = "";
+	const setArchivedFilter = (nextArchived: AgentSidebarFilters["archived"]) => {
+		onSidebarFiltersChange({
+			...sidebarFilters,
+			archived: nextArchived,
+		});
+	};
 	const [expandedById, setExpandedById] = useState<Record<string, boolean>>({});
 	const [collapsedSections, setCollapsedSections] = useState<
 		Record<string, boolean>
@@ -980,11 +950,7 @@ export const AgentsSidebar: FC<AgentsSidebarProps> = (props) => {
 
 	const chatTree = buildChatTree(chats);
 	const chatById = chatTree.chatById;
-	const visibleChatIDs = collectVisibleChatIDs({
-		chats,
-		search: normalizedSearch,
-		tree: chatTree,
-	});
+	const visibleChatIDs = collectVisibleChatIDs({ chats });
 	const visibleRootIDs = chatTree.rootIds.filter((chatID) =>
 		visibleChatIDs.has(chatID),
 	);
@@ -993,6 +959,12 @@ export const AgentsSidebar: FC<AgentsSidebarProps> = (props) => {
 		.map((id) => chatById.get(id))
 		.filter((chat): chat is Chat => (chat?.pin_order ?? 0) > 0)
 		.sort((a, b) => a.pin_order - b.pin_order);
+	const unpinnedChats = visibleRootIDs
+		.map((id) => chatById.get(id))
+		.filter((chat): chat is Chat => chat !== undefined && chat.pin_order === 0);
+	const hasAppliedResultFilters =
+		sidebarFilters.prStatuses.length > 0 || sidebarFilters.unreadOnly;
+	const disablePinnedReordering = hasAppliedResultFilters;
 
 	// Local override for pinned order during drag. Applied
 	// synchronously so there's no flash between the dnd-kit
@@ -1051,6 +1023,10 @@ export const AgentsSidebar: FC<AgentsSidebarProps> = (props) => {
 
 	const handleDragEnd = (event: DragEndEvent) => {
 		const { active, over } = event;
+
+		if (disablePinnedReordering) {
+			return;
+		}
 
 		lastDragEndedAtRef.current = performance.now();
 		if (!over || active.id === over.id) return;
@@ -1132,6 +1108,49 @@ export const AgentsSidebar: FC<AgentsSidebarProps> = (props) => {
 
 	const subNavTitle =
 		settingsPanel === "settings-admin" ? "Manage Agents" : "Settings";
+	const chatSections = (
+		sidebarFilters.groupBy === "chat_status"
+			? [
+					{
+						key: UNREAD_SECTION_KEY,
+						label: UNREAD_SECTION_KEY,
+						chats: unpinnedChats.filter((chat) => chat.has_unread),
+					},
+					{
+						key: READ_SECTION_KEY,
+						label: READ_SECTION_KEY,
+						chats: unpinnedChats.filter((chat) => !chat.has_unread),
+					},
+				]
+			: TIME_GROUPS.map((group) => ({
+					key: group,
+					label: group,
+					chats: unpinnedChats.filter(
+						(chat) => getTimeGroup(chat.updated_at) === group,
+					),
+				}))
+	).filter((section) => section.chats.length > 0);
+	const isShowingEmptyState = visibleRootIDs.length === 0;
+	const emptyStateMessage = hasAppliedResultFilters
+		? "No agents match these filters"
+		: sidebarFilters.archived === "archived"
+			? "No archived agents"
+			: "No agents yet";
+	const emptyStateActionLabel = hasAppliedResultFilters
+		? "Clear filters"
+		: sidebarFilters.archived === "archived"
+			? "Back to active"
+			: "View archived";
+	const handleEmptyStateAction = () => {
+		if (hasAppliedResultFilters) {
+			onClearSidebarFilters();
+			return;
+		}
+
+		setArchivedFilter(
+			sidebarFilters.archived === "archived" ? "active" : "archived",
+		);
+	};
 	return (
 		<div className="relative flex h-full w-full min-h-0 border-0 border-r border-solid overflow-hidden">
 			{/* ── Panel 1: Chats ── */}
@@ -1234,58 +1253,49 @@ export const AgentsSidebar: FC<AgentsSidebarProps> = (props) => {
 								</>
 							) : (
 								<ChatTreeContext value={chatTreeCtx}>
-									{visibleRootIDs.length === 0 ? (
-										<div className="rounded-lg border border-dashed border-border-default bg-surface-primary p-4 text-center text-xs text-content-secondary">
-											<p className="m-0">
-												{normalizedSearch
-													? "No matching agents"
-													: archivedFilter === "archived"
-														? "No archived agents"
-														: "No agents yet"}
-											</p>
-											<button
-												type="button"
-												className="mt-2 cursor-pointer border-none bg-transparent p-0 text-xs text-content-secondary hover:text-content-primary hover:underline"
-												onClick={() =>
-													onArchivedFilterChange?.(
-														archivedFilter === "archived"
-															? "active"
-															: "archived",
-													)
-												}
-											>
-												{archivedFilter === "archived"
-													? "← Back to active"
-													: "View archived →"}
-											</button>
+									<div className="pb-2">
+										<div className="mb-2 flex h-5 justify-end pr-1.5">
+											<FilterDropdown
+												filters={sidebarFilters}
+												onFiltersChange={onSidebarFiltersChange}
+											/>
 										</div>
-									) : (
-										<div>
-											{visibleRootIDs.length > 0 && (
-												<div className="pb-2">
-													<div className="mb-2 flex h-5 justify-end pr-1.5">
-														<FilterDropdown
-															archivedFilter={archivedFilter}
-															onArchivedFilterChange={onArchivedFilterChange}
+										{isShowingEmptyState ? (
+											<div className="rounded-lg border border-dashed border-border-default bg-surface-primary p-4 text-center text-xs text-content-secondary">
+												<p className="m-0">{emptyStateMessage}</p>
+												<button
+													type="button"
+													className="mt-2 cursor-pointer border-none bg-transparent p-0 text-xs text-content-secondary hover:text-content-primary hover:underline"
+													onClick={handleEmptyStateAction}
+												>
+													{emptyStateActionLabel}
+												</button>
+											</div>
+										) : (
+											<>
+												{pinnedChats.length > 0 && (
+													<div className="[&:not(:first-child)]:mt-3">
+														<ChatSectionHeader
+															label={PINNED_SECTION_KEY}
+															count={pinnedChats.length}
+															expanded={!collapsedSections[PINNED_SECTION_KEY]}
+															onToggle={() => toggleSection(PINNED_SECTION_KEY)}
+															testId={getSectionToggleTestId(
+																PINNED_SECTION_KEY,
+															)}
 														/>
-													</div>
-													{/* ── Pinned section ── */}
-													{pinnedChats.length > 0 && (
-														<div className="[&:not(:first-child)]:mt-3">
-															<ChatSectionHeader
-																label={PINNED_SECTION_KEY}
-																count={pinnedChats.length}
-																expanded={
-																	!collapsedSections[PINNED_SECTION_KEY]
-																}
-																onToggle={() =>
-																	toggleSection(PINNED_SECTION_KEY)
-																}
-																testId={getSectionToggleTestId(
-																	PINNED_SECTION_KEY,
-																)}
-															/>
-															{!collapsedSections[PINNED_SECTION_KEY] && (
+														{!collapsedSections[PINNED_SECTION_KEY] &&
+															(disablePinnedReordering ? (
+																<div className="flex flex-col gap-0.5">
+																	{sortedPinnedChats.map((chat) => (
+																		<ChatTreeNode
+																			key={chat.id}
+																			chat={chat}
+																			isChildNode={false}
+																		/>
+																	))}
+																</div>
+															) : (
 																<DndContext
 																	sensors={sensors}
 																	collisionDetection={closestCenter}
@@ -1308,51 +1318,41 @@ export const AgentsSidebar: FC<AgentsSidebarProps> = (props) => {
 																		</div>
 																	</SortableContext>
 																</DndContext>
+															))}
+													</div>
+												)}
+												{chatSections.map((section) => {
+													const isSectionExpanded =
+														!collapsedSections[section.key];
+													return (
+														<div
+															key={section.key}
+															className="[&:not(:first-child)]:mt-3"
+														>
+															<ChatSectionHeader
+																label={section.label}
+																count={section.chats.length}
+																expanded={isSectionExpanded}
+																onToggle={() => toggleSection(section.key)}
+																testId={getSectionToggleTestId(section.key)}
+															/>
+															{isSectionExpanded && (
+																<div className="flex flex-col gap-0.5">
+																	{section.chats.map((chat) => (
+																		<ChatTreeNode
+																			key={chat.id}
+																			chat={chat}
+																			isChildNode={false}
+																		/>
+																	))}
+																</div>
 															)}
 														</div>
-													)}
-													{/* ── Time-grouped sections ── */}
-													{TIME_GROUPS.map((group) => {
-														const groupChats = visibleRootIDs
-															.map((id) => chatById.get(id))
-															.filter(
-																(chat): chat is Chat =>
-																	chat !== undefined &&
-																	getTimeGroup(chat.updated_at) === group &&
-																	chat.pin_order === 0,
-															);
-														if (groupChats.length === 0) return null;
-														const isGroupExpanded = !collapsedSections[group];
-														return (
-															<div
-																key={group}
-																className="[&:not(:first-child)]:mt-3"
-															>
-																<ChatSectionHeader
-																	label={group}
-																	count={groupChats.length}
-																	expanded={isGroupExpanded}
-																	onToggle={() => toggleSection(group)}
-																	testId={getSectionToggleTestId(group)}
-																/>
-																{isGroupExpanded && (
-																	<div className="flex flex-col gap-0.5">
-																		{groupChats.map((chat) => (
-																			<ChatTreeNode
-																				key={chat.id}
-																				chat={chat}
-																				isChildNode={false}
-																			/>
-																		))}
-																	</div>
-																)}
-															</div>
-														);
-													})}
-												</div>
-											)}
-										</div>
-									)}
+													);
+												})}
+											</>
+										)}
+									</div>
 									{(hasNextPage || isFetchingNextPage) && (
 										<LoadMoreSentinel
 											onLoadMore={onLoadMore}

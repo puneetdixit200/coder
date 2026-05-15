@@ -24,9 +24,11 @@ import {
 	createChatMessage,
 	deleteChatQueuedMessage,
 	editChatMessage,
+	findChatInInfiniteChatsCaches,
 	infiniteChats,
 	interruptChat,
 	invalidateChatListQueries,
+	invalidateChatListQueriesWhere,
 	mergeWatchedChatIntoCaches,
 	mergeWatchedChatSummary,
 	paginatedChatCostUsers,
@@ -66,9 +68,13 @@ vi.mock("#/api/api", () => ({
 	},
 }));
 
-// The infinite query key used by useInfiniteQuery(infiniteChats())
-// is [...chatsKey, undefined] = ["chats", undefined].
-const infiniteChatsTestKey = [...chatsKey, undefined];
+type InfiniteChatsTestOptions = Parameters<typeof infiniteChats>[0];
+
+// Derive test keys from the query factory so key normalization changes stay in sync.
+const getInfiniteChatsTestKey = (opts?: InfiniteChatsTestOptions) =>
+	infiniteChats(opts).queryKey;
+
+const infiniteChatsTestKey = getInfiniteChatsTestKey();
 
 type InfiniteData = {
 	pages: TypesGen.Chat[][];
@@ -79,8 +85,9 @@ type InfiniteData = {
 const seedInfiniteChats = (
 	queryClient: QueryClient,
 	chats: TypesGen.Chat[],
+	opts?: InfiniteChatsTestOptions,
 ) => {
-	queryClient.setQueryData<InfiniteData>(infiniteChatsTestKey, {
+	queryClient.setQueryData<InfiniteData>(getInfiniteChatsTestKey(opts), {
 		pages: [chats],
 		pageParams: [0],
 	});
@@ -89,8 +96,11 @@ const seedInfiniteChats = (
 /** Read chats back from the infinite query cache. */
 const readInfiniteChats = (
 	queryClient: QueryClient,
+	opts?: InfiniteChatsTestOptions,
 ): TypesGen.Chat[] | undefined => {
-	const data = queryClient.getQueryData<InfiniteData>(infiniteChatsTestKey);
+	const data = queryClient.getQueryData<InfiniteData>(
+		getInfiniteChatsTestKey(opts),
+	);
 	return data?.pages.flat();
 };
 
@@ -183,7 +193,7 @@ describe("invalidateChatListQueries", () => {
 
 		// Sidebar queries.
 		queryClient.setQueryData(chatsKey, [makeChat(chatId)]);
-		queryClient.setQueryData([...chatsKey, { archived: false }], {
+		queryClient.setQueryData(getInfiniteChatsTestKey({ archived: false }), {
 			pages: [[makeChat(chatId)]],
 			pageParams: [0],
 		});
@@ -204,7 +214,7 @@ describe("invalidateChatListQueries", () => {
 			"flat chats should be invalidated",
 		).toBe(true);
 		expect(
-			queryClient.getQueryState([...chatsKey, { archived: false }])
+			queryClient.getQueryState(getInfiniteChatsTestKey({ archived: false }))
 				?.isInvalidated,
 			"infinite chats should be invalidated",
 		).toBe(true);
@@ -232,7 +242,7 @@ describe("invalidateChatListQueries", () => {
 	it("invalidates the infinite query with undefined opts", async () => {
 		const queryClient = createTestQueryClient();
 
-		queryClient.setQueryData([...chatsKey, undefined], {
+		queryClient.setQueryData(getInfiniteChatsTestKey(), {
 			pages: [[makeChat("chat-1")]],
 			pageParams: [0],
 		});
@@ -240,7 +250,7 @@ describe("invalidateChatListQueries", () => {
 		await invalidateChatListQueries(queryClient);
 
 		expect(
-			queryClient.getQueryState([...chatsKey, undefined])?.isInvalidated,
+			queryClient.getQueryState(getInfiniteChatsTestKey())?.isInvalidated,
 			"infinite chats with undefined opts should be invalidated",
 		).toBe(true);
 	});
@@ -263,6 +273,82 @@ describe("invalidateChatListQueries", () => {
 		expect(
 			queryClient.getQueryState(chatMessagesKey(otherChatId))?.isInvalidated,
 			"other chat's chatMessagesKey should NOT be invalidated",
+		).not.toBe(true);
+	});
+
+	it("findChatInInfiniteChatsCaches scans every cached list query", () => {
+		const queryClient = createTestQueryClient();
+		const target = makeChat("chat-target");
+
+		seedInfiniteChats(queryClient, [makeChat("chat-default")]);
+		seedInfiniteChats(queryClient, [target], {
+			archived: false,
+			prStatuses: ["open"],
+			unreadOnly: true,
+		});
+
+		expect(findChatInInfiniteChatsCaches(queryClient, target.id)).toEqual(
+			target,
+		);
+	});
+
+	it("unread filtered list queries are invalidated when unread membership can change", async () => {
+		const queryClient = createTestQueryClient();
+
+		seedInfiniteChats(queryClient, [makeChat("chat-default")]);
+		seedInfiniteChats(queryClient, [makeChat("chat-unread")], {
+			archived: false,
+			unreadOnly: true,
+		});
+		seedInfiniteChats(queryClient, [makeChat("chat-pr")], {
+			archived: false,
+			prStatuses: ["open"],
+		});
+
+		await invalidateChatListQueriesWhere(
+			queryClient,
+			(filters) => filters?.unreadOnly === true,
+		);
+
+		expect(
+			queryClient.getQueryState(
+				getInfiniteChatsTestKey({ archived: false, unreadOnly: true }),
+			)?.isInvalidated,
+		).toBe(true);
+		expect(
+			queryClient.getQueryState(infiniteChatsTestKey)?.isInvalidated,
+		).not.toBe(true);
+		expect(
+			queryClient.getQueryState(
+				getInfiniteChatsTestKey({ archived: false, prStatuses: ["open"] }),
+			)?.isInvalidated,
+		).not.toBe(true);
+	});
+
+	it("pr filtered list queries are invalidated on diff_status_change for root chats", async () => {
+		const queryClient = createTestQueryClient();
+
+		seedInfiniteChats(queryClient, [makeChat("chat-default")]);
+		seedInfiniteChats(queryClient, [makeChat("chat-pr")], {
+			archived: false,
+			prStatuses: ["draft", "open"],
+		});
+
+		await invalidateChatListQueriesWhere(
+			queryClient,
+			(filters) => (filters?.prStatuses?.length ?? 0) > 0,
+		);
+
+		expect(
+			queryClient.getQueryState(
+				getInfiniteChatsTestKey({
+					archived: false,
+					prStatuses: ["draft", "open"],
+				}),
+			)?.isInvalidated,
+		).toBe(true);
+		expect(
+			queryClient.getQueryState(infiniteChatsTestKey)?.isInvalidated,
 		).not.toBe(true);
 	});
 });
@@ -534,7 +620,7 @@ describe("pinChat optimistic update", () => {
 			makeChat(chatId),
 			makeChat("chat-pinned-2", { pin_order: 2 }),
 		]);
-		queryClient.setQueryData([...chatsKey, { archived: true }], {
+		queryClient.setQueryData(getInfiniteChatsTestKey({ archived: true }), {
 			pages: [[makeChat("chat-pinned-archived", { pin_order: 4 })]],
 			pageParams: [0],
 		});
@@ -789,7 +875,7 @@ describe("mutation invalidation scope", () => {
 	 *  observed on the /agents/:id detail page. */
 	const seedAllActiveQueries = (queryClient: QueryClient, chatId: string) => {
 		// Infinite sidebar list: ["chats", { archived: false }]
-		queryClient.setQueryData([...chatsKey, { archived: false }], {
+		queryClient.setQueryData(getInfiniteChatsTestKey({ archived: false }), {
 			pages: [[makeChat(chatId)]],
 			pageParams: [0],
 		});
@@ -1366,7 +1452,10 @@ describe("mutation invalidation scope", () => {
 
 			for (const { label, key } of [
 				{ label: "flat chats", key: chatsKey },
-				{ label: "infinite chats", key: [...chatsKey, { archived: false }] },
+				{
+					label: "infinite chats",
+					key: getInfiniteChatsTestKey({ archived: false }),
+				},
 				{ label: "chat detail", key: chatKey(chatId) },
 				{ label: "messages", key: chatMessagesKey(chatId) },
 				...unrelatedKeys(chatId),
@@ -1396,7 +1485,7 @@ describe("mutation invalidation scope", () => {
 			"flat chats should be invalidated",
 		).toBe(true);
 		expect(
-			queryClient.getQueryState([...chatsKey, { archived: false }])
+			queryClient.getQueryState(getInfiniteChatsTestKey({ archived: false }))
 				?.isInvalidated,
 			"infinite chats should be invalidated",
 		).toBe(true);
@@ -1510,6 +1599,54 @@ describe("infiniteChats", () => {
 				limit: PAGE_LIMIT,
 				offset: PAGE_LIMIT * 2,
 			});
+		});
+
+		it("builds q from archived, prStatuses, and unreadOnly", async () => {
+			vi.mocked(API.experimental.getChats).mockResolvedValue([]);
+			const { queryFn } = infiniteChats({
+				archived: true,
+				prStatuses: ["merged", "draft", "open"],
+				unreadOnly: true,
+			});
+
+			await queryFn({ pageParam: 0 });
+
+			expect(API.experimental.getChats).toHaveBeenCalledWith({
+				limit: PAGE_LIMIT,
+				offset: 0,
+				q: "archived:true pr_status:draft,open,merged chat_status:unread",
+			});
+		});
+
+		it("uses a stable key for equivalent pr_status orderings", () => {
+			const first = infiniteChats({
+				archived: false,
+				prStatuses: ["merged", "draft", "open", "draft"],
+			}).queryKey;
+			const second = infiniteChats({
+				archived: false,
+				prStatuses: ["open", "merged", "draft"],
+			}).queryKey;
+
+			expect(first).toEqual(second);
+		});
+
+		it("does not include groupBy in the query key", () => {
+			expect(
+				infiniteChats({
+					archived: false,
+					prStatuses: ["open"],
+					unreadOnly: true,
+					groupBy: "date",
+				}).queryKey,
+			).toEqual(
+				infiniteChats({
+					archived: false,
+					prStatuses: ["open"],
+					unreadOnly: true,
+					groupBy: "chat_status",
+				}).queryKey,
+			);
 		});
 
 		it("throws when pageParam is not a number", () => {

@@ -17,6 +17,7 @@ import {
 	MockUserOwner,
 } from "#/testHelpers/entities";
 import themes, { DEFAULT_THEME } from "#/theme";
+import type { AgentSidebarFilters } from "../../hooks/useAgentSidebarFilters";
 import { AgentsSidebar } from "./AgentsSidebar";
 
 // ---- IntersectionObserver mock ----
@@ -104,6 +105,13 @@ const Wrapper: FC<PropsWithChildren> = ({ children }) => {
 	);
 };
 
+const defaultSidebarFilters: AgentSidebarFilters = {
+	archived: "active",
+	groupBy: "date",
+	prStatuses: [],
+	unreadOnly: false,
+};
+
 const defaultProps: React.ComponentProps<typeof AgentsSidebar> = {
 	chats: [buildChat({ id: "chat-1", title: "Chat One" })],
 	chatErrorReasons: {},
@@ -118,49 +126,225 @@ const defaultProps: React.ComponentProps<typeof AgentsSidebar> = {
 	regeneratingTitleChatIds: [],
 	onBeforeNewAgent: vi.fn(),
 	isCreating: false,
-	archivedFilter: "active" as const,
+	sidebarFilters: defaultSidebarFilters,
+	onSidebarFiltersChange: vi.fn(),
+	onClearSidebarFilters: vi.fn(),
 };
 
 // ---- Tests ----
 
-describe("AgentsSidebar archived filter", () => {
-	it("calls the filter change callback from the dropdown", async () => {
+describe("AgentsSidebar filters", () => {
+	it("calls the sidebar filter change callback after Apply is clicked", async () => {
 		const user = userEvent.setup();
-		const onArchivedFilterChange = vi.fn();
+		const onSidebarFiltersChange = vi.fn();
 
 		render(
 			<Wrapper>
 				<AgentsSidebar
 					{...defaultProps}
-					onArchivedFilterChange={onArchivedFilterChange}
+					sidebarFilters={defaultSidebarFilters}
+					onSidebarFiltersChange={onSidebarFiltersChange}
 				/>
 			</Wrapper>,
 		);
 
 		await user.click(screen.getByRole("button", { name: "Filter agents" }));
-		await user.click(screen.getByRole("menuitem", { name: /archived/i }));
+		await user.click(screen.getByRole("radio", { name: "Archived" }));
 
-		expect(onArchivedFilterChange).toHaveBeenCalledWith("archived");
+		expect(onSidebarFiltersChange).not.toHaveBeenCalled();
+
+		await user.click(screen.getByRole("button", { name: "Apply" }));
+
+		expect(onSidebarFiltersChange).toHaveBeenCalledWith({
+			...defaultSidebarFilters,
+			archived: "archived",
+		});
 	});
 
-	it("calls the filter change callback from the empty-state link", async () => {
+	it("clear all resets staged controls to defaults", async () => {
 		const user = userEvent.setup();
-		const onArchivedFilterChange = vi.fn();
+		const onSidebarFiltersChange = vi.fn();
+		const sidebarFilters: AgentSidebarFilters = {
+			archived: "archived",
+			groupBy: "chat_status",
+			prStatuses: ["draft", "open"],
+			unreadOnly: true,
+		};
+
+		render(
+			<Wrapper>
+				<AgentsSidebar
+					{...defaultProps}
+					sidebarFilters={sidebarFilters}
+					onSidebarFiltersChange={onSidebarFiltersChange}
+				/>
+			</Wrapper>,
+		);
+
+		await user.click(screen.getByRole("button", { name: "Filter agents" }));
+		await user.click(screen.getByRole("button", { name: "Clear all" }));
+
+		expect(screen.getByRole("radio", { name: "Date" })).toBeChecked();
+		expect(screen.getByRole("radio", { name: "Active" })).toBeChecked();
+		expect(screen.getByRole("checkbox", { name: "Draft" })).not.toBeChecked();
+		expect(screen.getByRole("checkbox", { name: "Open" })).not.toBeChecked();
+		expect(screen.getByRole("checkbox", { name: "Unread" })).not.toBeChecked();
+		expect(onSidebarFiltersChange).not.toHaveBeenCalled();
+
+		await user.click(screen.getByRole("button", { name: "Apply" }));
+
+		expect(onSidebarFiltersChange).toHaveBeenCalledWith(defaultSidebarFilters);
+	});
+
+	it("keeps the filter button visible when applied filters return no agents", async () => {
+		const user = userEvent.setup();
+		const onClearSidebarFilters = vi.fn();
 
 		render(
 			<Wrapper>
 				<AgentsSidebar
 					{...defaultProps}
 					chats={[]}
-					archivedFilter="archived"
-					onArchivedFilterChange={onArchivedFilterChange}
+					sidebarFilters={{
+						...defaultSidebarFilters,
+						unreadOnly: true,
+					}}
+					onClearSidebarFilters={onClearSidebarFilters}
 				/>
 			</Wrapper>,
 		);
 
-		await user.click(screen.getByRole("button", { name: /back to active/i }));
+		expect(
+			screen.getByRole("button", { name: "Filter agents" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText("No agents match these filters"),
+		).toBeInTheDocument();
 
-		expect(onArchivedFilterChange).toHaveBeenCalledWith("active");
+		await user.click(screen.getByRole("button", { name: "Clear filters" }));
+
+		expect(onClearSidebarFilters).toHaveBeenCalledTimes(1);
+	});
+
+	it("preserves other applied filters when the empty-state archive toggle is used", async () => {
+		const user = userEvent.setup();
+		const onSidebarFiltersChange = vi.fn();
+		const sidebarFilters: AgentSidebarFilters = {
+			...defaultSidebarFilters,
+			archived: "archived",
+			groupBy: "chat_status",
+		};
+
+		render(
+			<Wrapper>
+				<AgentsSidebar
+					{...defaultProps}
+					chats={[]}
+					sidebarFilters={sidebarFilters}
+					onSidebarFiltersChange={onSidebarFiltersChange}
+				/>
+			</Wrapper>,
+		);
+
+		await user.click(screen.getByRole("button", { name: "Back to active" }));
+
+		expect(onSidebarFiltersChange).toHaveBeenCalledWith({
+			...sidebarFilters,
+			archived: "active",
+		});
+	});
+
+	it("groups unpinned chats by chat status", () => {
+		render(
+			<Wrapper>
+				<AgentsSidebar
+					{...defaultProps}
+					chats={[
+						buildChat({
+							id: "unread-chat",
+							title: "Unread chat",
+							has_unread: true,
+						}),
+						buildChat({
+							id: "read-chat",
+							title: "Read chat",
+						}),
+					]}
+					sidebarFilters={{
+						...defaultSidebarFilters,
+						groupBy: "chat_status",
+					}}
+				/>
+			</Wrapper>,
+		);
+
+		const unreadSection = screen.getByTestId("agents-section-toggle-Unread");
+		const readSection = screen.getByTestId("agents-section-toggle-Read");
+		const unreadNode = screen.getByTestId("agents-tree-node-unread-chat");
+		const readNode = screen.getByTestId("agents-tree-node-read-chat");
+
+		expect(
+			screen.queryByTestId("agents-section-toggle-Today"),
+		).not.toBeInTheDocument();
+		expect(
+			unreadSection.compareDocumentPosition(unreadNode) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+		expect(
+			unreadNode.compareDocumentPosition(readSection) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+		expect(
+			readSection.compareDocumentPosition(readNode) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+	});
+
+	it("keeps pinned chats out of the Unread and Read sections", () => {
+		render(
+			<Wrapper>
+				<AgentsSidebar
+					{...defaultProps}
+					chats={[
+						buildChat({
+							id: "pinned-chat",
+							title: "Pinned unread chat",
+							has_unread: true,
+							pin_order: 1,
+						}),
+						buildChat({
+							id: "unread-chat",
+							title: "Unread chat",
+							has_unread: true,
+						}),
+						buildChat({
+							id: "read-chat",
+							title: "Read chat",
+						}),
+					]}
+					sidebarFilters={{
+						...defaultSidebarFilters,
+						groupBy: "chat_status",
+					}}
+				/>
+			</Wrapper>,
+		);
+
+		const pinnedSection = screen.getByTestId("agents-section-toggle-Pinned");
+		const unreadSection = screen.getByTestId("agents-section-toggle-Unread");
+		const pinnedNode = screen.getByTestId("agents-tree-node-pinned-chat");
+
+		expect(screen.getAllByTestId("agents-tree-node-pinned-chat")).toHaveLength(
+			1,
+		);
+		expect(
+			pinnedSection.compareDocumentPosition(pinnedNode) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
+		expect(
+			pinnedNode.compareDocumentPosition(unreadSection) &
+				Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy();
 	});
 });
 

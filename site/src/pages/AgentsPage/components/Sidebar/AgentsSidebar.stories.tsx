@@ -11,6 +11,7 @@ import {
 	withAuthProvider,
 	withDashboardProvider,
 } from "#/testHelpers/storybook";
+import type { AgentSidebarFilters } from "../../hooks/useAgentSidebarFilters";
 import type { ModelSelectorOption } from "../ChatElements";
 import { AgentsSidebar } from "./AgentsSidebar";
 
@@ -37,6 +38,13 @@ const defaultModelOptions: ModelSelectorOption[] = [
 		displayName: "GPT-4o",
 	},
 ];
+
+const defaultSidebarFilters: AgentSidebarFilters = {
+	archived: "active",
+	groupBy: "date",
+	prStatuses: [],
+	unreadOnly: false,
+};
 
 const defaultModelConfigs: TypesGen.ChatModelConfig[] = [
 	{
@@ -109,9 +117,10 @@ const meta: Meta<typeof AgentsSidebar> = {
 		onBeforeNewAgent: fn(),
 		isCreating: false,
 		regeneratingTitleChatIds: [],
-		archivedFilter: "active" as const,
+		sidebarFilters: defaultSidebarFilters,
+		onSidebarFiltersChange: fn(),
+		onClearSidebarFilters: fn(),
 		isPersonalModelOverridesEnabled: true,
-		onArchivedFilterChange: fn(),
 	},
 	parameters: {
 		layout: "fullscreen",
@@ -720,15 +729,133 @@ export const SidebarFilterMenu: Story = {
 		await userEvent.click(
 			canvas.getByRole("button", { name: "Filter agents" }),
 		);
+		const dialog = await body.findByRole("dialog", { name: "Filter agents" });
 		await expect(
-			await body.findByRole("menuitem", { name: /Archived/i }),
+			within(dialog).getByRole("radiogroup", { name: "Group" }),
+		).toBeInTheDocument();
+		await expect(
+			within(dialog).getByRole("radiogroup", { name: "Archive status" }),
+		).toBeInTheDocument();
+		await expect(
+			within(dialog).getByRole("checkbox", { name: "Unread" }),
 		).toBeInTheDocument();
 		await userEvent.keyboard("{Escape}");
 		await waitFor(() => {
 			expect(
-				body.queryByRole("menuitem", { name: /Archived/i }),
+				body.queryByRole("dialog", { name: "Filter agents" }),
 			).not.toBeInTheDocument();
 		});
+	},
+};
+
+export const GroupByChatStatus: Story = {
+	args: {
+		sidebarFilters: {
+			...defaultSidebarFilters,
+			groupBy: "chat_status",
+		},
+		chats: [
+			buildChat({
+				id: "chat-status-unread",
+				title: "Unread grouped agent",
+				has_unread: true,
+				updated_at: recentTimestamp,
+			}),
+			buildChat({
+				id: "chat-status-read",
+				title: "Read grouped agent",
+				updated_at: recentTimestamp,
+			}),
+		],
+	},
+	parameters: {
+		reactRouter: reactRouterParameters({
+			location: { path: "/agents" },
+			routing: agentsRouting,
+		}),
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await expect(canvas.getByText("Unread (1)")).toBeInTheDocument();
+		await expect(canvas.getByText("Read (1)")).toBeInTheDocument();
+		await expect(canvas.getByText("Unread grouped agent")).toBeInTheDocument();
+		await expect(canvas.getByText("Read grouped agent")).toBeInTheDocument();
+		expect(canvas.queryByText("Today (2)")).not.toBeInTheDocument();
+	},
+};
+
+export const GroupByChatStatusKeepsPinnedSection: Story = {
+	args: {
+		sidebarFilters: {
+			...defaultSidebarFilters,
+			groupBy: "chat_status",
+		},
+		chats: [
+			buildChat({
+				id: "chat-status-pinned",
+				title: "Pinned unread grouped agent",
+				has_unread: true,
+				pin_order: 1,
+				updated_at: recentTimestamp,
+			}),
+			buildChat({
+				id: "chat-status-unpinned-unread",
+				title: "Unpinned unread grouped agent",
+				has_unread: true,
+				updated_at: recentTimestamp,
+			}),
+			buildChat({
+				id: "chat-status-unpinned-read",
+				title: "Unpinned read grouped agent",
+				updated_at: recentTimestamp,
+			}),
+		],
+	},
+	parameters: {
+		reactRouter: reactRouterParameters({
+			location: { path: "/agents" },
+			routing: agentsRouting,
+		}),
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await expect(canvas.getByText("Pinned (1)")).toBeInTheDocument();
+		await expect(canvas.getByText("Unread (1)")).toBeInTheDocument();
+		await expect(canvas.getByText("Read (1)")).toBeInTheDocument();
+		await expect(
+			canvas.getByText("Pinned unread grouped agent"),
+		).toBeInTheDocument();
+	},
+};
+
+export const UnreadFilterEmptyState: Story = {
+	args: {
+		sidebarFilters: {
+			...defaultSidebarFilters,
+			unreadOnly: true,
+		},
+		chats: [],
+	},
+	parameters: {
+		reactRouter: reactRouterParameters({
+			location: {
+				path: "/agents",
+				searchParams: { chat_status: "unread" },
+			},
+			routing: agentsRouting,
+		}),
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await expect(
+			canvas.getByRole("button", { name: "Filter agents" }),
+		).toBeVisible();
+		await expect(
+			canvas.getByText("No agents match these filters"),
+		).toBeVisible();
+		await expect(
+			canvas.getByRole("button", { name: "Clear filters" }),
+		).toBeVisible();
 	},
 };
 
@@ -1224,7 +1351,7 @@ export const ActiveFilterShowsActiveAgents: Story = {
 				updated_at: recentTimestamp,
 			}),
 		],
-		archivedFilter: "active",
+		sidebarFilters: defaultSidebarFilters,
 	},
 	parameters: {
 		reactRouter: reactRouterParameters({
@@ -1258,7 +1385,10 @@ export const ArchivedFilterShowsArchivedAgents: Story = {
 				updated_at: recentTimestamp,
 			}),
 		],
-		archivedFilter: "archived",
+		sidebarFilters: {
+			...defaultSidebarFilters,
+			archived: "archived",
+		},
 	},
 	parameters: {
 		reactRouter: reactRouterParameters({
@@ -1276,7 +1406,7 @@ export const ArchivedFilterShowsArchivedAgents: Story = {
 	},
 };
 
-export const PreservesArchivedFilterOnChatNavigation: Story = {
+export const PreservesSidebarFiltersOnChatNavigation: Story = {
 	args: {
 		chats: [
 			buildChat({
@@ -1286,13 +1416,24 @@ export const PreservesArchivedFilterOnChatNavigation: Story = {
 				updated_at: recentTimestamp,
 			}),
 		],
-		archivedFilter: "archived",
+		sidebarFilters: {
+			...defaultSidebarFilters,
+			archived: "archived",
+			groupBy: "chat_status",
+			prStatuses: ["draft", "open"],
+			unreadOnly: true,
+		},
 	},
 	parameters: {
 		reactRouter: reactRouterParameters({
 			location: {
 				path: "/agents",
-				searchParams: { archived: "archived" },
+				searchParams: {
+					archived: "archived",
+					group_by: "chat_status",
+					pr_status: "draft,open",
+					chat_status: "unread",
+				},
 			},
 			routing: [
 				{ path: "/agents", useStoryElement: true },
@@ -1307,9 +1448,11 @@ export const PreservesArchivedFilterOnChatNavigation: Story = {
 		});
 		await userEvent.click(link);
 		await waitFor(() => {
-			expect(canvas.getByTestId("child-search")).toHaveTextContent(
-				"archived=archived",
-			);
+			const search = canvas.getByTestId("child-search").textContent ?? "";
+			expect(search).toContain("archived=archived");
+			expect(search).toContain("group_by=chat_status");
+			expect(search).toContain("pr_status=draft%2Copen");
+			expect(search).toContain("chat_status=unread");
 		});
 	},
 };
@@ -1704,7 +1847,10 @@ export const ArchivedAgentUnarchiveOption: Story = {
 				updated_at: recentTimestamp,
 			}),
 		],
-		archivedFilter: "archived",
+		sidebarFilters: {
+			...defaultSidebarFilters,
+			archived: "archived",
+		},
 	},
 	parameters: {
 		reactRouter: reactRouterParameters({
@@ -2045,7 +2191,7 @@ export const SettingsAdminAgentsEntryPreserved: Story = {
 	},
 };
 
-export const PreservesArchivedFilterOnSettingsNavigation: Story = {
+export const PreservesSidebarFiltersOnSettingsNavigation: Story = {
 	args: {
 		chats: [
 			buildChat({
@@ -2055,13 +2201,24 @@ export const PreservesArchivedFilterOnSettingsNavigation: Story = {
 				updated_at: recentTimestamp,
 			}),
 		],
-		archivedFilter: "archived",
+		sidebarFilters: {
+			...defaultSidebarFilters,
+			archived: "archived",
+			groupBy: "chat_status",
+			prStatuses: ["draft", "open"],
+			unreadOnly: true,
+		},
 	},
 	parameters: {
 		reactRouter: reactRouterParameters({
 			location: {
 				path: "/agents",
-				searchParams: { archived: "archived" },
+				searchParams: {
+					archived: "archived",
+					group_by: "chat_status",
+					pr_status: "draft,open",
+					chat_status: "unread",
+				},
 			},
 			routing: [
 				{
@@ -2081,6 +2238,9 @@ export const PreservesArchivedFilterOnSettingsNavigation: Story = {
 				canvas.getByTestId("settings-state-from").textContent ?? "";
 			expect(fromValue).toContain("/agents");
 			expect(fromValue).toContain("archived=archived");
+			expect(fromValue).toContain("group_by=chat_status");
+			expect(fromValue).toContain("pr_status=draft%2Copen");
+			expect(fromValue).toContain("chat_status=unread");
 		});
 	},
 };
