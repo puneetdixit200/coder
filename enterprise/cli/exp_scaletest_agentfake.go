@@ -5,6 +5,7 @@ package cli
 import (
 	"os/signal"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/xerrors"
 
 	agplcli "github.com/coder/coder/v2/cli"
@@ -26,8 +27,9 @@ func (r *RootCmd) AGPLExperimental() []*serpent.Command {
 
 func (r *RootCmd) scaletestAgentFake() *serpent.Command {
 	var (
-		template string
-		owner    string
+		template          string
+		owner             string
+		prometheusAddress string
 	)
 
 	cmd := &serpent.Command{
@@ -47,7 +49,9 @@ func (r *RootCmd) scaletestAgentFake() *serpent.Command {
 			"for the workspace external-agent feature; both the workspace builds and the credentials " +
 			"endpoint are gated server-side. Pair with `coder exp scaletest create-workspaces " +
 			"--no-wait-for-agents` to seed the workspaces this command will pick up. Workspaces created " +
-			"after this command starts are NOT picked up; rerun the command after seeding more.",
+			"after this command starts are NOT picked up; rerun the command after seeding more.\n\n" +
+			"Exposes Prometheus metrics (Go runtime and process collectors) at /metrics on " +
+			"--prometheus-address (default 0.0.0.0:21112).",
 		Handler: func(inv *serpent.Invocation) error {
 			ctx := inv.Context()
 			client, err := r.InitClient(inv)
@@ -68,6 +72,11 @@ func (r *RootCmd) scaletestAgentFake() *serpent.Command {
 			}
 
 			logger := inv.Logger
+
+			prometheusSrvClose := agplcli.ServeHandler(ctx, logger,
+				promhttp.Handler(), prometheusAddress, "prometheus")
+			defer prometheusSrvClose()
+
 			mgr := agentfake.NewManager(client, logger, agentfake.ManagerOptions{
 				Template: template,
 				Owner:    owner,
@@ -93,6 +102,13 @@ func (r *RootCmd) scaletestAgentFake() *serpent.Command {
 			Env:         "CODER_SCALETEST_AGENTFAKE_OWNER",
 			Description: "Optional workspace-owner filter (username). When empty, all owners' workspaces of the template are included.",
 			Value:       serpent.StringOf(&owner),
+		},
+		{
+			Flag:        "prometheus-address",
+			Env:         "CODER_SCALETEST_AGENTFAKE_PROMETHEUS_ADDRESS",
+			Default:     "0.0.0.0:21112",
+			Description: "Address on which to expose Prometheus metrics (Go runtime + process collectors) at /metrics.",
+			Value:       serpent.StringOf(&prometheusAddress),
 		},
 	}
 
