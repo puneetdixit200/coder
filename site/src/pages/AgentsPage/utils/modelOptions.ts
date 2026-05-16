@@ -235,6 +235,7 @@ export const formatProviderLabel = (provider: string): string => {
 			return "Google";
 		case "openai-compatible":
 		case "openai_compatible":
+		case "openaicompat":
 			return "OpenAI-compatible";
 		case "openrouter":
 			return "OpenRouter";

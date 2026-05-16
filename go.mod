@@ -79,7 +79,7 @@ replace github.com/spf13/afero => github.com/aslilac/afero v0.0.0-20250403163713
 // Forked from coder/fantasy (coder_2_33) which adds:
 // 1) Anthropic computer use + thinking effort
 // 2) Go 1.25 downgrade for Windows CI compat
-// 3) ibetitsmike/fantasy#4 — skip ephemeral replay items when store=false
+// 3) ibetitsmike/fantasy#4, skip ephemeral replay items when store=false
 // 4) (anthropic-sdk-go) dannykopping's appendCompact performance fixes
 // 5) (anthropic-sdk-go) DirectEncoder to eliminate nested MarshalJSON allocation chain
 // 6) Anthropic EffortXHigh constant for Claude Opus 4.7
@@ -88,8 +88,10 @@ replace github.com/spf13/afero => github.com/aslilac/afero v0.0.0-20250403163713
 //    when paired with reasoning, and validate function_call output pairing.
 // 8) coder/fantasy#33, fail closed when Anthropic or OpenAI Responses
 //    streams close before their terminal events.
-// See: https://github.com/coder/fantasy/commits/246c4ae7aff9e
-replace charm.land/fantasy => github.com/coder/fantasy v0.0.0-20260507124503-246c4ae7aff9
+// 9) coder/fantasy#34, typed OpenAI-compatible parallel_tool_calls,
+//    max_completion_tokens, prompt_cache_key, and extra_body options.
+// See: https://github.com/coder/fantasy/commits/09f48c1f7f39
+replace charm.land/fantasy => github.com/coder/fantasy v0.0.0-20260516194945-09f48c1f7f39
 
 // coder/coder uses a fork of charmbracelet's fork of the Anthropic Go SDK
 // with performance improvements and Bedrock header cleanup.

@@ -224,6 +224,7 @@ describe("countConfiguredProviderConfigs", () => {
 describe("formatProviderLabel", () => {
 	it("formats OpenAI compatible providers", () => {
 		expect(formatProviderLabel("openai-compatible")).toBe("OpenAI-compatible");
+		expect(formatProviderLabel("openaicompat")).toBe("OpenAI-compatible");
 	});
 });
 
