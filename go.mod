@@ -90,8 +90,8 @@ replace github.com/spf13/afero => github.com/aslilac/afero v0.0.0-20250403163713
 //    streams close before their terminal events.
 // 9) coder/fantasy#34, typed OpenAI-compatible parallel_tool_calls,
 //    max_completion_tokens, prompt_cache_key, and extra_body options.
-// See: https://github.com/coder/fantasy/commits/09f48c1f7f39
-replace charm.land/fantasy => github.com/coder/fantasy v0.0.0-20260516194945-09f48c1f7f39
+// See: https://github.com/coder/fantasy/commits/4e4fb0dd0400
+replace charm.land/fantasy => github.com/coder/fantasy v0.0.0-20260516200840-4e4fb0dd0400
 
 // coder/coder uses a fork of charmbracelet's fork of the Anthropic Go SDK
 // with performance improvements and Bedrock header cleanup.
