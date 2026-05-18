@@ -63,14 +63,13 @@ func NewWSMetrics(reg prometheus.Registerer) *WSMetrics {
 // RecordProbe records a single liveness probe outcome. It extracts
 // the HTTP route from ctx via ExtractHTTPRoute.
 func (m *WSMetrics) RecordProbe(ctx context.Context, r httpapi.ProbeResult) {
-	path := ExtractHTTPRoute(ctx)
-	if path == "" {
-		path = "UNKNOWN"
-	}
-	m.Probes.WithLabelValues(path, string(r)).Inc()
+	m.Probes.WithLabelValues(ExtractHTTPRoute(ctx), string(r)).Inc()
 }
 
 func Prometheus(register prometheus.Registerer, ws *WSMetrics) func(http.Handler) http.Handler {
+	if ws == nil {
+		panic("developer error: WSMetrics is nil")
+	}
 	factory := promauto.With(register)
 	requestsProcessed := factory.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "coderd",

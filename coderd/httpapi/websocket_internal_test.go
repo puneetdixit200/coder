@@ -132,6 +132,7 @@ func TestWSWatcher(t *testing.T) {
 			"expected a debug-level log entry for the closed connection")
 		assert.Zero(t, rec.count(ProbeOK), "expected no successful probes")
 		assert.Equal(t, 1, rec.len(), "expected exactly one probe recorded")
+		assert.Equal(t, 1, rec.count(ProbePeerClosed), "expected one peer_closed probe")
 	})
 
 	t.Run("ContextCanceled", func(t *testing.T) {
@@ -259,36 +260,67 @@ func TestWSWatcher(t *testing.T) {
 		}, testutil.IntervalFast, "probe counter not incremented")
 	})
 
-	t.Run("NilRecorder", func(t *testing.T) {
+	t.Run("ProbeTimeout", func(t *testing.T) {
 		t.Parallel()
 		ctx := testutil.Context(t, testutil.WaitShort)
 
 		sink := testutil.NewFakeSink(t)
 		logger := sink.Logger()
 		mClock := quartz.NewMock(t)
+		rec := &probeRecords{}
 
 		trap := mClock.Trap().NewTicker("WSWatcher")
 		defer trap.Close()
 
-		serverConn := websocketPair(ctx, t)
+		// Set up a websocket pair manually. Do NOT call CloseRead
+		// on the client so pong frames are never sent back.
+		serverConnCh := make(chan *websocket.Conn, 1)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			conn, err := websocket.Accept(w, r, nil)
+			if err != nil {
+				return
+			}
+			serverConnCh <- conn
+			<-ctx.Done()
+		}))
+		t.Cleanup(srv.Close)
 
-		// nil recorder should not panic.
-		w := &WSWatcher{rec: nil, clk: mClock, interval: time.Second}
+		//nolint:bodyclose
+		clientConn, _, err := websocket.Dial(ctx, srv.URL, nil)
+		require.NoError(t, err)
+		// Intentionally NOT calling clientConn.CloseRead, so pongs won't be processed.
+		t.Cleanup(func() {
+			_ = clientConn.Close(websocket.StatusNormalClosure, "test cleanup")
+		})
+
+		var serverConn *websocket.Conn
+		select {
+		case sc := <-serverConnCh:
+			_ = sc.CloseRead(ctx)
+			serverConn = sc
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for server websocket accept")
+		}
+
+		// Use a very short interval so the real context.WithTimeout
+		// inside probe() expires quickly when pongs aren't coming.
+		w := &WSWatcher{rec: rec.record, clk: mClock, interval: time.Millisecond}
 		watchCtx := w.Watch(ctx, logger, serverConn)
 
 		trap.MustWait(ctx).MustRelease(ctx)
-		mClock.Advance(time.Second).MustWait(ctx)
+		mClock.Advance(time.Millisecond).MustWait(ctx)
 
-		// Give the ping round-trip time to complete.
-		testutil.Eventually(ctx, t, func(context.Context) bool {
-			select {
-			case <-watchCtx.Done():
-				t.Fatal("watch context should not be canceled when pings succeed")
-			default:
-			}
-			// No way to assert on probe count without a recorder,
-			// but we can verify no panics occurred and context is still alive.
-			return true
-		}, testutil.IntervalFast, "watcher should not panic with nil recorder")
+		// Wait for the watch context to be canceled (probe failure).
+		select {
+		case <-watchCtx.Done():
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for watch context to be canceled")
+		}
+
+		assert.Equal(t, 1, rec.count(ProbeTimeout), "expected one timeout probe")
+		// Timeout is an expected condition, should be Debug not Error.
+		errorEntries := sink.Entries(func(e slog.SinkEntry) bool { return e.Level == slog.LevelError })
+		assert.Empty(t, errorEntries,
+			"probe timeout should not produce error-level logs, got: %+v", errorEntries)
 	})
 }
