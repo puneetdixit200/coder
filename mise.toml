@@ -61,3 +61,18 @@ lazygit = "0.61.1"
 [tools."go:github.com/coder/sqlc/cmd/sqlc"]
 version = "337309bfb9524f38466a5090e310040fc7af0203"
 install_env = { CGO_ENABLED = "1" }
+
+# Consumed only when CI runs `mise oci build` to produce the dogfood
+# image on top of ghcr.io/coder/oss-dogfood-base. Local developers
+# never invoke `mise oci build`, so this block is inert for them.
+# `from` and `--tag` are passed via CLI per distro at build time.
+#
+# mount_point matches the path the base image reserves at
+# /opt/mise/data and exposes via MISE_SHARED_INSTALL_DIRS. The
+# `env` keys override mise oci's default MISE_DATA_DIR/MISE_CONFIG_DIR
+# baked into the image so the runtime keeps using the home volume.
+[oci]
+mount_point = "/opt/mise/data"
+user = "coder"
+workdir = "/home/coder"
+env = { MISE_DATA_DIR = "/home/coder/.local/share/mise", MISE_TRUSTED_CONFIG_PATHS = "/home/coder/coder:/etc/mise", MISE_SHARED_INSTALL_DIRS = "/opt/mise/data/installs" }

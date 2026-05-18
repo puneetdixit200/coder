@@ -823,13 +823,10 @@ data "docker_registry_image" "dogfood" {
 
 resource "docker_image" "dogfood" {
   name = "${local.image_tags[data.coder_parameter.image_type.value]}@${data.docker_registry_image.dogfood.sha256_digest}"
+  # CI rebuilds and pushes when any baked-in input changes, so the
+  # digest captures every effective change on its own.
   pull_triggers = [
     data.docker_registry_image.dogfood.sha256_digest,
-    sha1(join("", [for f in fileset(path.module, "files/*") : filesha1(f)])),
-    filesha1("ubuntu-22.04/Dockerfile"),
-    filesha1("ubuntu-26.04/Dockerfile"),
-    filesha1("nix.hash"),
-    filesha1("mise.hash"),
   ]
   keep_locally = true
 }
