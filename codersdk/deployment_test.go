@@ -927,8 +927,8 @@ func TestAIBudgetConfigParsing(t *testing.T) {
 
 		require.NoError(t, opts.SetDefaults())
 
-		assert.Equal(t, string(codersdk.AIBudgetPolicyHighest), dv.AI.BridgeConfig.BudgetPolicy)
-		assert.Equal(t, string(codersdk.AIBudgetPeriodMonth), dv.AI.BridgeConfig.BudgetPeriod)
+		assert.Equal(t, string(codersdk.AIBudgetPolicyHighest), dv.AI.GatewayConfig.BudgetPolicy)
+		assert.Equal(t, string(codersdk.AIBudgetPeriodMonth), dv.AI.GatewayConfig.BudgetPeriod)
 	})
 
 	t.Run("AcceptsSupportedValues", func(t *testing.T) {
@@ -943,8 +943,8 @@ func TestAIBudgetConfigParsing(t *testing.T) {
 			{Name: "CODER_AI_BUDGET_PERIOD", Value: string(codersdk.AIBudgetPeriodMonth)},
 		}))
 
-		assert.Equal(t, string(codersdk.AIBudgetPolicyHighest), dv.AI.BridgeConfig.BudgetPolicy)
-		assert.Equal(t, string(codersdk.AIBudgetPeriodMonth), dv.AI.BridgeConfig.BudgetPeriod)
+		assert.Equal(t, string(codersdk.AIBudgetPolicyHighest), dv.AI.GatewayConfig.BudgetPolicy)
+		assert.Equal(t, string(codersdk.AIBudgetPeriodMonth), dv.AI.GatewayConfig.BudgetPeriod)
 	})
 
 	t.Run("RejectsUnsupportedPolicy", func(t *testing.T) {

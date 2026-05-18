@@ -29,24 +29,24 @@ func newAIBridgeProxyDaemon(coderAPI *coderd.API, providers []aibridge.Provider)
 	metrics := aibridgeproxyd.NewMetrics(reg)
 
 	var newDumper func(provider, requestID string) aibridgeproxyd.RoundTripDumper
-	if dumpDir := coderAPI.DeploymentValues.AI.BridgeProxyConfig.APIDumpDir.String(); dumpDir != "" {
+	if dumpDir := coderAPI.DeploymentValues.AI.GatewayProxyConfig.APIDumpDir.String(); dumpDir != "" {
 		newDumper = func(provider, requestID string) aibridgeproxyd.RoundTripDumper {
 			return apidump.NewDumper(filepath.Join(dumpDir, provider, requestID), logger)
 		}
 	}
 
 	srv, err := aibridgeproxyd.New(ctx, logger, aibridgeproxyd.Options{
-		ListenAddr:               coderAPI.DeploymentValues.AI.BridgeProxyConfig.ListenAddr.String(),
-		TLSCertFile:              coderAPI.DeploymentValues.AI.BridgeProxyConfig.TLSCertFile.String(),
-		TLSKeyFile:               coderAPI.DeploymentValues.AI.BridgeProxyConfig.TLSKeyFile.String(),
+		ListenAddr:               coderAPI.DeploymentValues.AI.GatewayProxyConfig.ListenAddr.String(),
+		TLSCertFile:              coderAPI.DeploymentValues.AI.GatewayProxyConfig.TLSCertFile.String(),
+		TLSKeyFile:               coderAPI.DeploymentValues.AI.GatewayProxyConfig.TLSKeyFile.String(),
 		CoderAccessURL:           coderAPI.AccessURL.String(),
-		MITMCertFile:             coderAPI.DeploymentValues.AI.BridgeProxyConfig.MITMCertFile.String(),
-		MITMKeyFile:              coderAPI.DeploymentValues.AI.BridgeProxyConfig.MITMKeyFile.String(),
+		MITMCertFile:             coderAPI.DeploymentValues.AI.GatewayProxyConfig.MITMCertFile.String(),
+		MITMKeyFile:              coderAPI.DeploymentValues.AI.GatewayProxyConfig.MITMKeyFile.String(),
 		DomainAllowlist:          domains,
 		AIBridgeProviderFromHost: providerFromHost,
-		UpstreamProxy:            coderAPI.DeploymentValues.AI.BridgeProxyConfig.UpstreamProxy.String(),
-		UpstreamProxyCA:          coderAPI.DeploymentValues.AI.BridgeProxyConfig.UpstreamProxyCA.String(),
-		AllowedPrivateCIDRs:      coderAPI.DeploymentValues.AI.BridgeProxyConfig.AllowedPrivateCIDRs.Value(),
+		UpstreamProxy:            coderAPI.DeploymentValues.AI.GatewayProxyConfig.UpstreamProxy.String(),
+		UpstreamProxyCA:          coderAPI.DeploymentValues.AI.GatewayProxyConfig.UpstreamProxyCA.String(),
+		AllowedPrivateCIDRs:      coderAPI.DeploymentValues.AI.GatewayProxyConfig.AllowedPrivateCIDRs.Value(),
 		NewDumper:                newDumper,
 		Metrics:                  metrics,
 	})

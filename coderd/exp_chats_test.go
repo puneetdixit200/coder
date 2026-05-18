@@ -1725,7 +1725,7 @@ func TestListChatModels(t *testing.T) {
 
 		ctx := testutil.Context(t, testutil.WaitLong)
 		values := chatDeploymentValues(t)
-		values.AI.BridgeConfig.LegacyOpenAI.Key = serpent.String("deployment-openai-key")
+		values.AI.GatewayConfig.LegacyOpenAI.Key = serpent.String("deployment-openai-key")
 		client := newChatClientWithDeploymentValues(t, values)
 		_ = coderdtest.CreateFirstUser(t, client.Client)
 
@@ -2108,7 +2108,7 @@ func TestListChatProviders(t *testing.T) {
 
 		ctx := testutil.Context(t, testutil.WaitLong)
 		values := chatDeploymentValues(t)
-		values.AI.BridgeConfig.LegacyOpenAI.Key = serpent.String("deployment-openai-key")
+		values.AI.GatewayConfig.LegacyOpenAI.Key = serpent.String("deployment-openai-key")
 		client := newChatClientWithDeploymentValues(t, values)
 		_ = coderdtest.CreateFirstUser(t, client.Client)
 
@@ -2356,7 +2356,7 @@ func TestCreateChatProvider(t *testing.T) {
 
 		ctx := testutil.Context(t, testutil.WaitLong)
 		values := chatDeploymentValues(t)
-		values.AI.BridgeConfig.LegacyOpenAI.Key = serpent.String("deployment-openai-key")
+		values.AI.GatewayConfig.LegacyOpenAI.Key = serpent.String("deployment-openai-key")
 		client := newChatClientWithDeploymentValues(t, values)
 		_ = coderdtest.CreateFirstUser(t, client.Client)
 
@@ -2586,7 +2586,7 @@ func TestUpdateChatProvider(t *testing.T) {
 
 		ctx := testutil.Context(t, testutil.WaitLong)
 		values := chatDeploymentValues(t)
-		values.AI.BridgeConfig.LegacyOpenAI.Key = serpent.String("deployment-openai-key")
+		values.AI.GatewayConfig.LegacyOpenAI.Key = serpent.String("deployment-openai-key")
 		client := newChatClientWithDeploymentValues(t, values)
 		_ = coderdtest.CreateFirstUser(t, client.Client)
 
@@ -3014,13 +3014,13 @@ func TestDeleteChatProvider(t *testing.T) {
 func TestChatProviderAPIKeysFromDeploymentValues(t *testing.T) {
 	t.Parallel()
 
-	t.Run("DoesNotReuseBridgeConfig", func(t *testing.T) {
+	t.Run("DoesNotReuseGatewayConfig", func(t *testing.T) {
 		t.Parallel()
 
 		values := chatDeploymentValues(t)
-		values.AI.BridgeConfig.LegacyOpenAI.Key = serpent.String("deployment-openai-key")
-		values.AI.BridgeConfig.LegacyAnthropic.Key = serpent.String("deployment-anthropic-key")
-		values.AI.BridgeConfig.LegacyOpenAI.BaseURL = serpent.String("https://custom-openai.example.com")
+		values.AI.GatewayConfig.LegacyOpenAI.Key = serpent.String("deployment-openai-key")
+		values.AI.GatewayConfig.LegacyAnthropic.Key = serpent.String("deployment-anthropic-key")
+		values.AI.GatewayConfig.LegacyOpenAI.BaseURL = serpent.String("https://custom-openai.example.com")
 
 		keys := coderd.ChatProviderAPIKeysFromDeploymentValues(values)
 		require.Equal(t, chatprovider.ProviderAPIKeys{}, keys)
@@ -3223,7 +3223,7 @@ func TestUserChatProviderConfigs(t *testing.T) {
 
 		ctx := testutil.Context(t, testutil.WaitLong)
 		values := chatDeploymentValues(t)
-		values.AI.BridgeConfig.LegacyOpenAI.Key = serpent.String("deployment-openai-key")
+		values.AI.GatewayConfig.LegacyOpenAI.Key = serpent.String("deployment-openai-key")
 		client := newChatClientWithDeploymentValues(t, values)
 		_ = coderdtest.CreateFirstUser(t, client.Client)
 

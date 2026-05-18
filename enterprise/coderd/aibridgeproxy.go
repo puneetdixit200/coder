@@ -28,7 +28,7 @@ func aibridgeproxyHandler(api *API, middlewares ...func(http.Handler) http.Handl
 
 		r.HandleFunc("/*", func(rw http.ResponseWriter, r *http.Request) {
 			// Check if the proxy is enabled.
-			if !api.DeploymentValues.AI.BridgeProxyConfig.Enabled.Value() {
+			if !api.DeploymentValues.AI.GatewayProxyConfig.Enabled.Value() {
 				httpapi.Write(r.Context(), rw, http.StatusNotFound, codersdk.Response{
 					Message: "AI Bridge Proxy is not enabled.",
 				})

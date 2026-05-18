@@ -860,7 +860,7 @@ func (r *RootCmd) Server(newAPI func(context.Context, *coderd.Options) (*coderd.
 			if err != nil {
 				return xerrors.Errorf("read AI providers from env: %w", err)
 			}
-			vals.AI.BridgeConfig.Providers = append(vals.AI.BridgeConfig.Providers, aiProviders...)
+			vals.AI.GatewayConfig.Providers = append(vals.AI.GatewayConfig.Providers, aiProviders...)
 
 			// Manage push notifications.
 			webpusher, err := webpush.New(ctx, ptr.Ref(options.Logger.Named("webpush")), options.Database, options.AccessURL.String())

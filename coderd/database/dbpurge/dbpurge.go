@@ -279,7 +279,7 @@ func (i *instance) purgeTick(ctx context.Context, db database.Store, start time.
 		}
 
 		var purgedAIBridgeRecords int64
-		aibridgeRetention := i.vals.AI.BridgeConfig.Retention.Value()
+		aibridgeRetention := i.vals.AI.GatewayConfig.Retention.Value()
 		if aibridgeRetention > 0 {
 			deleteAIBridgeRecordsBefore := start.Add(-aibridgeRetention)
 			// nolint:gocritic // Needs to run as aibridge context.

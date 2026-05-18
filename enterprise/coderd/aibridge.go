@@ -47,7 +47,7 @@ var errInvalidCursor = xerrors.New("invalid pagination cursor")
 func aibridgeHandler(api *API, middlewares ...func(http.Handler) http.Handler) func(r chi.Router) {
 	// Build the overload protection middleware chain for the aibridged handler.
 	// These limits are applied per-replica.
-	bridgeCfg := api.DeploymentValues.AI.BridgeConfig
+	bridgeCfg := api.DeploymentValues.AI.GatewayConfig
 	concurrencyLimiter := httpmw.ConcurrencyLimit(bridgeCfg.MaxConcurrency.Value(), "AI Bridge")
 	rateLimiter := httpmw.RateLimitByAuthToken(int(bridgeCfg.RateLimit.Value()), aiBridgeRateLimitWindow)
 

@@ -27,7 +27,7 @@ func TestAIBridgeListInterceptions(t *testing.T) {
 		t.Parallel()
 
 		dv := coderdtest.DeploymentValues(t)
-		dv.AI.BridgeConfig.Enabled = true
+		dv.AI.GatewayConfig.Enabled = true
 		ownerClient, db, owner := coderdenttest.NewWithDatabase(t, &coderdenttest.Options{
 			Options: &coderdtest.Options{
 				DeploymentValues: dv,
@@ -79,7 +79,7 @@ func TestAIBridgeListInterceptions(t *testing.T) {
 		t.Parallel()
 
 		dv := coderdtest.DeploymentValues(t)
-		dv.AI.BridgeConfig.Enabled = true
+		dv.AI.GatewayConfig.Enabled = true
 		ownerClient, db, owner := coderdenttest.NewWithDatabase(t, &coderdenttest.Options{
 			Options: &coderdtest.Options{
 				DeploymentValues: dv,
@@ -166,7 +166,7 @@ func TestAIBridgeListInterceptions(t *testing.T) {
 		t.Parallel()
 
 		dv := coderdtest.DeploymentValues(t)
-		dv.AI.BridgeConfig.Enabled = true
+		dv.AI.GatewayConfig.Enabled = true
 		ownerClient, db, owner := coderdenttest.NewWithDatabase(t, &coderdenttest.Options{
 			Options: &coderdtest.Options{
 				DeploymentValues: dv,
@@ -211,7 +211,7 @@ func TestAIBridgeListInterceptions(t *testing.T) {
 		t.Parallel()
 
 		dv := coderdtest.DeploymentValues(t)
-		dv.AI.BridgeConfig.Enabled = true
+		dv.AI.GatewayConfig.Enabled = true
 		ownerClient, db, owner := coderdenttest.NewWithDatabase(t, &coderdenttest.Options{
 			Options: &coderdtest.Options{
 				DeploymentValues: dv,

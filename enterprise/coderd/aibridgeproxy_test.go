@@ -21,7 +21,7 @@ func TestAIBridgeProxyCertificateRetrieval(t *testing.T) {
 		t.Parallel()
 
 		dv := coderdtest.DeploymentValues(t)
-		dv.AI.BridgeConfig.Enabled = serpent.Bool(true)
+		dv.AI.GatewayConfig.Enabled = serpent.Bool(true)
 		// Proxy is disabled by default, so we don't need to set it explicitly.
 		client, _ := coderdenttest.New(t, &coderdenttest.Options{
 			Options: &coderdtest.Options{
@@ -52,7 +52,7 @@ func TestAIBridgeProxyCertificateRetrieval(t *testing.T) {
 		t.Parallel()
 
 		dv := coderdtest.DeploymentValues(t)
-		dv.AI.BridgeConfig.Enabled = serpent.Bool(true)
+		dv.AI.GatewayConfig.Enabled = serpent.Bool(true)
 		client, _ := coderdenttest.New(t, &coderdenttest.Options{
 			Options: &coderdtest.Options{
 				DeploymentValues: dv,
@@ -81,7 +81,7 @@ func TestAIBridgeProxyCertificateRetrieval(t *testing.T) {
 		t.Parallel()
 
 		dv := coderdtest.DeploymentValues(t)
-		dv.AI.BridgeConfig.Enabled = serpent.Bool(true)
+		dv.AI.GatewayConfig.Enabled = serpent.Bool(true)
 		client, _ := coderdenttest.New(t, &coderdenttest.Options{
 			Options: &coderdtest.Options{
 				DeploymentValues: dv,

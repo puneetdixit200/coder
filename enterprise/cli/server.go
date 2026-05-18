@@ -163,10 +163,10 @@ func (r *RootCmd) Server(_ func()) *serpent.Command {
 
 		// Build the provider list and start AI Bridge daemons only when
 		// at least one of the bridge or proxy features is enabled.
-		bridgeEnabled := options.DeploymentValues.AI.BridgeConfig.Enabled.Value()
-		proxyEnabled := options.DeploymentValues.AI.BridgeProxyConfig.Enabled.Value()
+		bridgeEnabled := options.DeploymentValues.AI.GatewayConfig.Enabled.Value()
+		proxyEnabled := options.DeploymentValues.AI.GatewayProxyConfig.Enabled.Value()
 		if bridgeEnabled || proxyEnabled {
-			providers, err := buildProviders(options.DeploymentValues.AI.BridgeConfig)
+			providers, err := buildProviders(options.DeploymentValues.AI.GatewayConfig)
 			if err != nil {
 				return nil, nil, xerrors.Errorf("build AI providers: %w", err)
 			}
