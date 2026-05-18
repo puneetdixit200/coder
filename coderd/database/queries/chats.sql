@@ -35,6 +35,12 @@ chats_expanded AS (
         updated_chats.plan_mode,
         updated_chats.client_type,
         updated_chats.last_turn_summary,
+        updated_chats.snapshot_version,
+        updated_chats.history_version,
+        updated_chats.queue_version,
+        updated_chats.generation_attempt,
+        updated_chats.runner_id,
+        updated_chats.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -87,6 +93,12 @@ chats_expanded AS (
         updated_chats.plan_mode,
         updated_chats.client_type,
         updated_chats.last_turn_summary,
+        updated_chats.snapshot_version,
+        updated_chats.history_version,
+        updated_chats.queue_version,
+        updated_chats.generation_attempt,
+        updated_chats.runner_id,
+        updated_chats.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -620,6 +632,12 @@ chats_expanded AS (
         inserted_chat.plan_mode,
         inserted_chat.client_type,
         inserted_chat.last_turn_summary,
+        inserted_chat.snapshot_version,
+        inserted_chat.history_version,
+        inserted_chat.queue_version,
+        inserted_chat.generation_attempt,
+        inserted_chat.runner_id,
+        inserted_chat.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -752,6 +770,12 @@ chats_expanded AS (
         updated_chat.plan_mode,
         updated_chat.client_type,
         updated_chat.last_turn_summary,
+        updated_chat.snapshot_version,
+        updated_chat.history_version,
+        updated_chat.queue_version,
+        updated_chat.generation_attempt,
+        updated_chat.runner_id,
+        updated_chat.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -804,6 +828,12 @@ chats_expanded AS (
         updated_chat.plan_mode,
         updated_chat.client_type,
         updated_chat.last_turn_summary,
+        updated_chat.snapshot_version,
+        updated_chat.history_version,
+        updated_chat.queue_version,
+        updated_chat.generation_attempt,
+        updated_chat.runner_id,
+        updated_chat.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -854,6 +884,12 @@ chats_expanded AS (
         updated_chat.plan_mode,
         updated_chat.client_type,
         updated_chat.last_turn_summary,
+        updated_chat.snapshot_version,
+        updated_chat.history_version,
+        updated_chat.queue_version,
+        updated_chat.generation_attempt,
+        updated_chat.runner_id,
+        updated_chat.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -904,6 +940,12 @@ chats_expanded AS (
         updated_chat.plan_mode,
         updated_chat.client_type,
         updated_chat.last_turn_summary,
+        updated_chat.snapshot_version,
+        updated_chat.history_version,
+        updated_chat.queue_version,
+        updated_chat.generation_attempt,
+        updated_chat.runner_id,
+        updated_chat.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -954,6 +996,12 @@ chats_expanded AS (
         updated_chat.plan_mode,
         updated_chat.client_type,
         updated_chat.last_turn_summary,
+        updated_chat.snapshot_version,
+        updated_chat.history_version,
+        updated_chat.queue_version,
+        updated_chat.generation_attempt,
+        updated_chat.runner_id,
+        updated_chat.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -1003,6 +1051,12 @@ chats_expanded AS (
         updated_chat.plan_mode,
         updated_chat.client_type,
         updated_chat.last_turn_summary,
+        updated_chat.snapshot_version,
+        updated_chat.history_version,
+        updated_chat.queue_version,
+        updated_chat.generation_attempt,
+        updated_chat.runner_id,
+        updated_chat.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -1052,6 +1106,12 @@ chats_expanded AS (
         updated_chat.plan_mode,
         updated_chat.client_type,
         updated_chat.last_turn_summary,
+        updated_chat.snapshot_version,
+        updated_chat.history_version,
+        updated_chat.queue_version,
+        updated_chat.generation_attempt,
+        updated_chat.runner_id,
+        updated_chat.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -1103,6 +1163,12 @@ chats_expanded AS (
         updated_chat.plan_mode,
         updated_chat.client_type,
         updated_chat.last_turn_summary,
+        updated_chat.snapshot_version,
+        updated_chat.history_version,
+        updated_chat.queue_version,
+        updated_chat.generation_attempt,
+        updated_chat.runner_id,
+        updated_chat.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -1172,6 +1238,12 @@ chats_expanded AS (
         updated_chat.plan_mode,
         updated_chat.client_type,
         updated_chat.last_turn_summary,
+        updated_chat.snapshot_version,
+        updated_chat.history_version,
+        updated_chat.queue_version,
+        updated_chat.generation_attempt,
+        updated_chat.runner_id,
+        updated_chat.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -1278,6 +1350,12 @@ chats_expanded AS (
         acquired_chats.plan_mode,
         acquired_chats.client_type,
         acquired_chats.last_turn_summary,
+        acquired_chats.snapshot_version,
+        acquired_chats.history_version,
+        acquired_chats.queue_version,
+        acquired_chats.generation_attempt,
+        acquired_chats.runner_id,
+        acquired_chats.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -1332,6 +1410,12 @@ chats_expanded AS (
         updated_chat.plan_mode,
         updated_chat.client_type,
         updated_chat.last_turn_summary,
+        updated_chat.snapshot_version,
+        updated_chat.history_version,
+        updated_chat.queue_version,
+        updated_chat.generation_attempt,
+        updated_chat.runner_id,
+        updated_chat.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -1386,6 +1470,12 @@ chats_expanded AS (
         updated_chat.plan_mode,
         updated_chat.client_type,
         updated_chat.last_turn_summary,
+        updated_chat.snapshot_version,
+        updated_chat.history_version,
+        updated_chat.queue_version,
+        updated_chat.generation_attempt,
+        updated_chat.runner_id,
+        updated_chat.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM
@@ -1550,12 +1640,17 @@ RETURNING
     *;
 
 -- name: InsertChatQueuedMessage :one
-INSERT INTO chat_queued_messages (chat_id, content, model_config_id)
-VALUES (
-    @chat_id,
-    @content,
-    sqlc.narg('model_config_id')::uuid
-)
+-- Legacy queue insertion path. When no caller-supplied creator exists,
+-- preserve the created_by invariant by attributing the queued row to the
+-- chat owner.
+INSERT INTO chat_queued_messages (chat_id, content, model_config_id, created_by)
+SELECT
+    @chat_id::uuid,
+    @content::jsonb,
+    sqlc.narg('model_config_id')::uuid,
+    chats.owner_id
+FROM chats
+WHERE chats.id = @chat_id::uuid
 RETURNING *;
 
 -- name: GetChatQueuedMessages :many
@@ -1641,6 +1736,12 @@ chats_expanded AS (
         locked_chat.plan_mode,
         locked_chat.client_type,
         locked_chat.last_turn_summary,
+        locked_chat.snapshot_version,
+        locked_chat.history_version,
+        locked_chat.queue_version,
+        locked_chat.generation_attempt,
+        locked_chat.runner_id,
+        locked_chat.requires_action_deadline_at,
         owner.username AS owner_username,
         owner.name AS owner_name
     FROM locked_chat
@@ -2206,3 +2307,339 @@ LEFT JOIN to_archive t ON t.id = a.id
 -- created_at ASC flows through to dbpurge's digest truncation; see
 -- buildDigestData in dbpurge.go for the tradeoff rationale.
 ORDER BY (a.root_chat_id IS NULL) DESC, a.owner_id ASC, a.created_at ASC, a.id ASC;
+
+
+-- =====================================================================
+-- chatd core state machine queries.
+--
+-- These are consumed by the coderd/x/chatd/chatstate package. They
+-- are intentionally kept side-by-side with the legacy chatd queries
+-- above so the existing runtime keeps working while the state machine
+-- lands behind it.
+-- =====================================================================
+
+-- name: LockChatAndBumpSnapshotVersion :one
+-- Locks the chat row with FOR UPDATE and atomically increments its
+-- snapshot_version, returning the post-bump chat. This is the single
+-- entry point ChatMachine.Update uses to acquire the row lock and
+-- allocate a new snapshot version in one round trip.
+WITH bumped_chat AS (
+    UPDATE chats
+    SET snapshot_version = snapshot_version + 1
+    WHERE id = (
+        SELECT id FROM chats
+        WHERE id = @id::uuid
+        FOR UPDATE
+    )
+    RETURNING *
+),
+chats_expanded AS (
+    SELECT
+        bumped_chat.id,
+        bumped_chat.owner_id,
+        bumped_chat.workspace_id,
+        bumped_chat.title,
+        bumped_chat.status,
+        bumped_chat.worker_id,
+        bumped_chat.started_at,
+        bumped_chat.heartbeat_at,
+        bumped_chat.created_at,
+        bumped_chat.updated_at,
+        bumped_chat.parent_chat_id,
+        bumped_chat.root_chat_id,
+        bumped_chat.last_model_config_id,
+        bumped_chat.archived,
+        bumped_chat.last_error,
+        bumped_chat.mode,
+        bumped_chat.mcp_server_ids,
+        bumped_chat.labels,
+        bumped_chat.build_id,
+        bumped_chat.agent_id,
+        bumped_chat.pin_order,
+        bumped_chat.last_read_message_id,
+        bumped_chat.last_injected_context,
+        bumped_chat.dynamic_tools,
+        bumped_chat.organization_id,
+        bumped_chat.plan_mode,
+        bumped_chat.client_type,
+        bumped_chat.last_turn_summary,
+        bumped_chat.snapshot_version,
+        bumped_chat.history_version,
+        bumped_chat.queue_version,
+        bumped_chat.generation_attempt,
+        bumped_chat.runner_id,
+        bumped_chat.requires_action_deadline_at,
+        owner.username AS owner_username,
+        owner.name AS owner_name
+    FROM bumped_chat
+    JOIN visible_users owner ON owner.id = bumped_chat.owner_id
+)
+SELECT *
+FROM chats_expanded;
+
+-- name: InsertChatWithSnapshot :one
+-- Inserts a new chat with snapshot_version = 1, status set explicitly
+-- by the caller, archived = false. The versioning fields
+-- (history_version, queue_version, generation_attempt) default to 0;
+-- the message revision trigger updates history_version when initial
+-- history rows are inserted later in the same transaction.
+WITH inserted_chat AS (
+    INSERT INTO chats (
+        organization_id,
+        owner_id,
+        workspace_id,
+        build_id,
+        agent_id,
+        parent_chat_id,
+        root_chat_id,
+        last_model_config_id,
+        title,
+        mode,
+        plan_mode,
+        status,
+        mcp_server_ids,
+        labels,
+        dynamic_tools,
+        client_type,
+        snapshot_version,
+        history_version,
+        queue_version,
+        generation_attempt,
+        archived
+    ) VALUES (
+        @organization_id::uuid,
+        @owner_id::uuid,
+        sqlc.narg('workspace_id')::uuid,
+        sqlc.narg('build_id')::uuid,
+        sqlc.narg('agent_id')::uuid,
+        sqlc.narg('parent_chat_id')::uuid,
+        sqlc.narg('root_chat_id')::uuid,
+        @last_model_config_id::uuid,
+        @title::text,
+        sqlc.narg('mode')::chat_mode,
+        sqlc.narg('plan_mode')::chat_plan_mode,
+        @status::chat_status,
+        COALESCE(@mcp_server_ids::uuid[], '{}'::uuid[]),
+        COALESCE(sqlc.narg('labels')::jsonb, '{}'::jsonb),
+        sqlc.narg('dynamic_tools')::jsonb,
+        @client_type::chat_client_type,
+        1,
+        0,
+        0,
+        0,
+        false
+    )
+    RETURNING *
+),
+chats_expanded AS (
+    SELECT
+        inserted_chat.id,
+        inserted_chat.owner_id,
+        inserted_chat.workspace_id,
+        inserted_chat.title,
+        inserted_chat.status,
+        inserted_chat.worker_id,
+        inserted_chat.started_at,
+        inserted_chat.heartbeat_at,
+        inserted_chat.created_at,
+        inserted_chat.updated_at,
+        inserted_chat.parent_chat_id,
+        inserted_chat.root_chat_id,
+        inserted_chat.last_model_config_id,
+        inserted_chat.archived,
+        inserted_chat.last_error,
+        inserted_chat.mode,
+        inserted_chat.mcp_server_ids,
+        inserted_chat.labels,
+        inserted_chat.build_id,
+        inserted_chat.agent_id,
+        inserted_chat.pin_order,
+        inserted_chat.last_read_message_id,
+        inserted_chat.last_injected_context,
+        inserted_chat.dynamic_tools,
+        inserted_chat.organization_id,
+        inserted_chat.plan_mode,
+        inserted_chat.client_type,
+        inserted_chat.last_turn_summary,
+        inserted_chat.snapshot_version,
+        inserted_chat.history_version,
+        inserted_chat.queue_version,
+        inserted_chat.generation_attempt,
+        inserted_chat.runner_id,
+        inserted_chat.requires_action_deadline_at,
+        owner.username AS owner_username,
+        owner.name AS owner_name
+    FROM inserted_chat
+    JOIN visible_users owner ON owner.id = inserted_chat.owner_id
+)
+SELECT *
+FROM chats_expanded;
+
+-- name: UpdateChatExecutionState :one
+-- Atomically updates the execution-state-managed fields on a chat:
+-- status, archived, last_error, ownership identifiers, and the
+-- requires-action deadline. Callers compose this with transition
+-- mutations inside a single ChatMachine.Update transaction.
+WITH updated_chat AS (
+    UPDATE chats
+    SET
+        status = @status::chat_status,
+        archived = @archived::boolean,
+        worker_id = sqlc.narg('worker_id')::uuid,
+        runner_id = sqlc.narg('runner_id')::uuid,
+        last_error = sqlc.narg('last_error')::jsonb,
+        requires_action_deadline_at = sqlc.narg('requires_action_deadline_at')::timestamptz,
+        pin_order = CASE WHEN @archived::boolean THEN 0 ELSE pin_order END,
+        updated_at = NOW()
+    WHERE id = @id::uuid
+    RETURNING *
+),
+chats_expanded AS (
+    SELECT
+        updated_chat.id,
+        updated_chat.owner_id,
+        updated_chat.workspace_id,
+        updated_chat.title,
+        updated_chat.status,
+        updated_chat.worker_id,
+        updated_chat.started_at,
+        updated_chat.heartbeat_at,
+        updated_chat.created_at,
+        updated_chat.updated_at,
+        updated_chat.parent_chat_id,
+        updated_chat.root_chat_id,
+        updated_chat.last_model_config_id,
+        updated_chat.archived,
+        updated_chat.last_error,
+        updated_chat.mode,
+        updated_chat.mcp_server_ids,
+        updated_chat.labels,
+        updated_chat.build_id,
+        updated_chat.agent_id,
+        updated_chat.pin_order,
+        updated_chat.last_read_message_id,
+        updated_chat.last_injected_context,
+        updated_chat.dynamic_tools,
+        updated_chat.organization_id,
+        updated_chat.plan_mode,
+        updated_chat.client_type,
+        updated_chat.last_turn_summary,
+        updated_chat.snapshot_version,
+        updated_chat.history_version,
+        updated_chat.queue_version,
+        updated_chat.generation_attempt,
+        updated_chat.runner_id,
+        updated_chat.requires_action_deadline_at,
+        owner.username AS owner_username,
+        owner.name AS owner_name
+    FROM updated_chat
+    JOIN visible_users owner ON owner.id = updated_chat.owner_id
+)
+SELECT *
+FROM chats_expanded;
+
+-- name: IncrementChatGenerationAttempt :one
+-- Increments generation_attempt and returns the resulting value.
+UPDATE chats
+SET generation_attempt = generation_attempt + 1, updated_at = NOW()
+WHERE id = @id::uuid
+RETURNING generation_attempt;
+
+-- name: GetDatabaseNow :one
+-- Returns the current database timestamp. Used so transitions that
+-- record deadlines or heartbeats rely on a clock that is consistent
+-- with the database rather than the caller's local clock.
+SELECT NOW()::timestamptz AS now;
+
+-- name: InsertChatQueuedMessageWithCreator :one
+-- Inserts a queued message that carries a position (from the default
+-- sequence) and an explicit created_by reference. Use this when the
+-- queued-message creator differs from the chat owner.
+INSERT INTO chat_queued_messages (chat_id, content, model_config_id, created_by)
+VALUES (
+    @chat_id::uuid,
+    @content::jsonb,
+    sqlc.narg('model_config_id')::uuid,
+    @created_by::uuid
+)
+RETURNING *;
+
+-- name: GetChatQueuedMessagesByPosition :many
+-- Returns queued messages in state-machine order (position ASC, id ASC).
+SELECT * FROM chat_queued_messages
+WHERE chat_id = @chat_id::uuid
+ORDER BY position ASC, id ASC;
+
+-- name: CountChatQueuedMessages :one
+-- Cheap queue-length check used by ChatMachine.Update when deciding
+-- whether the chat is in a "1" sub-state.
+SELECT COUNT(*)::bigint AS count
+FROM chat_queued_messages
+WHERE chat_id = @chat_id::uuid;
+
+-- name: GetChatQueuedMessageHead :one
+-- Returns the queue head (lowest position, then lowest id).
+SELECT * FROM chat_queued_messages
+WHERE chat_id = @chat_id::uuid
+ORDER BY position ASC, id ASC
+LIMIT 1;
+
+-- name: GetChatQueuedMessageByID :one
+SELECT * FROM chat_queued_messages
+WHERE id = @id::bigint AND chat_id = @chat_id::uuid;
+
+-- name: DeleteChatQueuedMessageReturningCount :execrows
+-- Deletes a queued message, scoped to the parent chat. Returns the
+-- number of affected rows so callers can detect missing rows without
+-- a follow-up read.
+DELETE FROM chat_queued_messages
+WHERE id = @id::bigint AND chat_id = @chat_id::uuid;
+
+-- name: DeleteAllChatQueuedMessagesReturningCount :execrows
+DELETE FROM chat_queued_messages
+WHERE chat_id = @chat_id::uuid;
+
+-- name: ReorderChatQueuedMessageToHead :execrows
+-- Sets the target queued message's position to one less than the
+-- current minimum position for that chat, moving it to the head.
+UPDATE chat_queued_messages AS target
+SET position = COALESCE(
+    (SELECT MIN(position) FROM chat_queued_messages WHERE chat_id = @chat_id::uuid),
+    0
+) - 1
+WHERE target.id = @id::bigint
+  AND target.chat_id = @chat_id::uuid
+  AND target.position > COALESCE(
+    (SELECT MIN(position) FROM chat_queued_messages WHERE chat_id = @chat_id::uuid),
+    target.position
+  );
+
+-- name: UpsertChatHeartbeat :exec
+-- Upserts a heartbeat row for the (chat_id, runner_id) lease. Uses
+-- database time so callers do not depend on a local clock.
+INSERT INTO chat_heartbeats (chat_id, runner_id, heartbeat_at)
+VALUES (@chat_id::uuid, @runner_id::uuid, NOW())
+ON CONFLICT (chat_id, runner_id) DO UPDATE
+SET heartbeat_at = EXCLUDED.heartbeat_at;
+
+-- name: GetChatHeartbeat :one
+SELECT * FROM chat_heartbeats
+WHERE chat_id = @chat_id::uuid AND runner_id = @runner_id::uuid;
+
+-- name: IsChatHeartbeatStale :one
+-- Returns true when there is no heartbeat row for (chat_id, runner_id)
+-- or the existing row is older than @stale_seconds seconds by database
+-- time. chatstate calls this in a single query so the staleness check
+-- is atomic and does not depend on the caller's local clock.
+SELECT NOT EXISTS (
+    SELECT 1 FROM chat_heartbeats
+    WHERE chat_id = @chat_id::uuid
+      AND runner_id = @runner_id::uuid
+      AND heartbeat_at > NOW() - (INTERVAL '1 second' * @stale_seconds::int)
+) AS stale;
+
+-- name: DeleteAllChatHeartbeats :exec
+-- Deletes all heartbeat rows for the chat. Used during ownership
+-- transitions that abandon a lease.
+DELETE FROM chat_heartbeats WHERE chat_id = @chat_id::uuid;
+

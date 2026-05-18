@@ -326,7 +326,8 @@ CREATE TYPE chat_status AS ENUM (
     'paused',
     'completed',
     'error',
-    'requires_action'
+    'requires_action',
+    'interrupting'
 );
 
 CREATE TYPE connection_status AS ENUM (
@@ -693,6 +694,29 @@ BEGIN
 				)
         END;
 
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION bump_chat_queue_version_on_queued_message_change() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    changed_chat_id uuid;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        changed_chat_id = OLD.chat_id;
+    ELSE
+        changed_chat_id = NEW.chat_id;
+    END IF;
+
+    UPDATE chats
+    SET queue_version = snapshot_version
+    WHERE id = changed_chat_id;
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
     RETURN NEW;
 END;
 $$;
@@ -1109,6 +1133,83 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION set_chat_message_revision_before() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    chat_snapshot_version bigint;
+BEGIN
+    IF TG_OP = 'INSERT' AND NEW.revision IS NOT NULL THEN
+        RAISE EXCEPTION 'chat_messages.revision must be assigned by trigger';
+    END IF;
+
+    IF TG_OP = 'UPDATE' THEN
+        IF OLD.chat_id IS DISTINCT FROM NEW.chat_id THEN
+            RAISE EXCEPTION 'chat_messages.chat_id is immutable';
+        END IF;
+
+        IF OLD.revision IS DISTINCT FROM NEW.revision THEN
+            RAISE EXCEPTION 'chat_messages.revision must be assigned by trigger';
+        END IF;
+
+        IF OLD IS NOT DISTINCT FROM NEW THEN
+            RETURN NEW;
+        END IF;
+    END IF;
+
+    SELECT snapshot_version INTO chat_snapshot_version
+    FROM chats WHERE id = NEW.chat_id;
+
+    IF chat_snapshot_version IS NULL THEN
+        RAISE EXCEPTION 'chat % does not exist', NEW.chat_id;
+    END IF;
+
+    NEW.revision = chat_snapshot_version;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION update_chat_history_after_message_insert() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    UPDATE chats c
+    SET history_version = c.snapshot_version,
+        generation_attempt = 0
+    FROM (
+        SELECT DISTINCT chat_id FROM chat_message_history_new_rows
+    ) AS affected
+    WHERE c.id = affected.chat_id
+      AND (
+          c.history_version IS DISTINCT FROM c.snapshot_version
+          OR c.generation_attempt <> 0
+      );
+    RETURN NULL;
+END;
+$$;
+
+CREATE FUNCTION update_chat_history_after_message_update() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    UPDATE chats c
+    SET history_version = c.snapshot_version,
+        generation_attempt = 0
+    FROM (
+        SELECT DISTINCT n.chat_id
+        FROM chat_message_history_new_rows n
+        JOIN chat_message_history_old_rows o ON o.id = n.id
+        WHERE o IS DISTINCT FROM n
+    ) AS affected
+    WHERE c.id = affected.chat_id
+      AND (
+          c.history_version IS DISTINCT FROM c.snapshot_version
+          OR c.generation_attempt <> 0
+      );
+    RETURN NULL;
+END;
+$$;
+
 CREATE TABLE ai_model_prices (
     provider text NOT NULL,
     model text NOT NULL,
@@ -1416,6 +1517,12 @@ CREATE TABLE chat_files (
     data bytea NOT NULL
 );
 
+CREATE UNLOGGED TABLE chat_heartbeats (
+    chat_id uuid NOT NULL,
+    runner_id uuid NOT NULL,
+    heartbeat_at timestamp with time zone NOT NULL
+);
+
 CREATE TABLE chat_messages (
     id bigint NOT NULL,
     chat_id uuid NOT NULL,
@@ -1437,7 +1544,8 @@ CREATE TABLE chat_messages (
     total_cost_micros bigint,
     runtime_ms bigint,
     deleted boolean DEFAULT false NOT NULL,
-    provider_response_id text
+    provider_response_id text,
+    revision bigint NOT NULL
 );
 
 CREATE SEQUENCE chat_messages_id_seq
@@ -1489,12 +1597,21 @@ CREATE TABLE chat_providers (
 
 COMMENT ON COLUMN chat_providers.api_key_key_id IS 'The ID of the key used to encrypt the provider API key. If this is NULL, the API key is not encrypted';
 
+CREATE SEQUENCE chat_queued_messages_position_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
 CREATE TABLE chat_queued_messages (
     id bigint NOT NULL,
     chat_id uuid NOT NULL,
     content jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    model_config_id uuid
+    model_config_id uuid,
+    "position" bigint DEFAULT nextval('chat_queued_messages_position_seq'::regclass) NOT NULL,
+    created_by uuid NOT NULL
 );
 
 CREATE SEQUENCE chat_queued_messages_id_seq
@@ -1557,6 +1674,12 @@ CREATE TABLE chats (
     plan_mode chat_plan_mode,
     client_type chat_client_type DEFAULT 'api'::chat_client_type NOT NULL,
     last_turn_summary text,
+    snapshot_version bigint DEFAULT 1 NOT NULL,
+    history_version bigint DEFAULT 0 NOT NULL,
+    queue_version bigint DEFAULT 0 NOT NULL,
+    generation_attempt bigint DEFAULT 0 NOT NULL,
+    runner_id uuid,
+    requires_action_deadline_at timestamp with time zone,
     CONSTRAINT chats_pin_order_archived_check CHECK (((pin_order = 0) OR (archived = false))),
     CONSTRAINT chats_pin_order_parent_check CHECK (((pin_order = 0) OR (parent_chat_id IS NULL)))
 );
@@ -1641,6 +1764,12 @@ CREATE VIEW chats_expanded AS
     c.plan_mode,
     c.client_type,
     c.last_turn_summary,
+    c.snapshot_version,
+    c.history_version,
+    c.queue_version,
+    c.generation_attempt,
+    c.runner_id,
+    c.requires_action_deadline_at,
     owner.username AS owner_username,
     owner.name AS owner_name
    FROM (chats c
@@ -3556,6 +3685,9 @@ ALTER TABLE ONLY chat_file_links
 ALTER TABLE ONLY chat_files
     ADD CONSTRAINT chat_files_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY chat_heartbeats
+    ADD CONSTRAINT chat_heartbeats_pkey PRIMARY KEY (chat_id, runner_id);
+
 ALTER TABLE ONLY chat_messages
     ADD CONSTRAINT chat_messages_pkey PRIMARY KEY (id);
 
@@ -3892,6 +4024,8 @@ CREATE INDEX api_keys_last_used_idx ON api_keys USING btree (last_used DESC);
 
 COMMENT ON INDEX api_keys_last_used_idx IS 'Index for optimizing api_keys queries filtering by last_used';
 
+CREATE INDEX chat_heartbeats_heartbeat_at_idx ON chat_heartbeats USING btree (heartbeat_at);
+
 CREATE INDEX idx_agent_stats_created_at ON workspace_agent_stats USING btree (created_at);
 
 CREATE INDEX idx_agent_stats_user_id ON workspace_agent_stats USING btree (user_id);
@@ -3999,6 +4133,8 @@ CREATE UNIQUE INDEX idx_chat_model_configs_single_default ON chat_model_configs 
 CREATE INDEX idx_chat_providers_enabled ON chat_providers USING btree (enabled);
 
 CREATE INDEX idx_chat_queued_messages_chat_id ON chat_queued_messages USING btree (chat_id);
+
+CREATE INDEX idx_chat_queued_messages_chat_position_id ON chat_queued_messages USING btree (chat_id, "position", id);
 
 CREATE INDEX idx_chats_agent_id ON chats USING btree (agent_id) WHERE (agent_id IS NOT NULL);
 
@@ -4240,6 +4376,12 @@ COMMENT ON TRIGGER remove_organization_member_custom_role ON custom_roles IS 'Wh
 
 CREATE TRIGGER trigger_aggregate_usage_event AFTER INSERT ON usage_events FOR EACH ROW EXECUTE FUNCTION aggregate_usage_event();
 
+CREATE TRIGGER trigger_bump_chat_queue_version_on_queued_message_delete AFTER DELETE ON chat_queued_messages FOR EACH ROW EXECUTE FUNCTION bump_chat_queue_version_on_queued_message_change();
+
+CREATE TRIGGER trigger_bump_chat_queue_version_on_queued_message_insert AFTER INSERT ON chat_queued_messages FOR EACH ROW EXECUTE FUNCTION bump_chat_queue_version_on_queued_message_change();
+
+CREATE TRIGGER trigger_bump_chat_queue_version_on_queued_message_update AFTER UPDATE OF content, model_config_id, "position", created_by ON chat_queued_messages FOR EACH ROW EXECUTE FUNCTION bump_chat_queue_version_on_queued_message_change();
+
 CREATE TRIGGER trigger_delete_group_members_on_org_member_delete BEFORE DELETE ON organization_members FOR EACH ROW EXECUTE FUNCTION delete_group_members_on_org_member_delete();
 
 CREATE TRIGGER trigger_delete_oauth2_provider_app_token AFTER DELETE ON oauth2_provider_app_tokens FOR EACH ROW EXECUTE FUNCTION delete_deleted_oauth2_provider_app_token_api_key();
@@ -4249,6 +4391,14 @@ CREATE TRIGGER trigger_insert_apikeys BEFORE INSERT ON api_keys FOR EACH ROW EXE
 CREATE TRIGGER trigger_insert_organization_system_roles AFTER INSERT ON organizations FOR EACH ROW EXECUTE FUNCTION insert_organization_system_roles();
 
 CREATE TRIGGER trigger_nullify_next_start_at_on_workspace_autostart_modificati AFTER UPDATE ON workspaces FOR EACH ROW EXECUTE FUNCTION nullify_next_start_at_on_workspace_autostart_modification();
+
+CREATE TRIGGER trigger_set_chat_message_revision_on_insert BEFORE INSERT ON chat_messages FOR EACH ROW EXECUTE FUNCTION set_chat_message_revision_before();
+
+CREATE TRIGGER trigger_set_chat_message_revision_on_update BEFORE UPDATE ON chat_messages FOR EACH ROW EXECUTE FUNCTION set_chat_message_revision_before();
+
+CREATE TRIGGER trigger_update_chat_history_after_message_insert AFTER INSERT ON chat_messages REFERENCING NEW TABLE AS chat_message_history_new_rows FOR EACH STATEMENT EXECUTE FUNCTION update_chat_history_after_message_insert();
+
+CREATE TRIGGER trigger_update_chat_history_after_message_update AFTER UPDATE ON chat_messages REFERENCING OLD TABLE AS chat_message_history_old_rows NEW TABLE AS chat_message_history_new_rows FOR EACH STATEMENT EXECUTE FUNCTION update_chat_history_after_message_update();
 
 CREATE TRIGGER trigger_update_users AFTER INSERT OR UPDATE ON users FOR EACH ROW WHEN ((new.deleted = true)) EXECUTE FUNCTION delete_deleted_user_resources();
 
@@ -4304,6 +4454,9 @@ ALTER TABLE ONLY chat_files
 
 ALTER TABLE ONLY chat_files
     ADD CONSTRAINT chat_files_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY chat_heartbeats
+    ADD CONSTRAINT chat_heartbeats_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY chat_messages
     ADD CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE;
