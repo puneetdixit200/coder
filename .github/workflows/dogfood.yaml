@@ -189,11 +189,19 @@ jobs:
             ghcr.io/coder/oss-dogfood-base:${{ matrix.image-version }}-${{ steps.shas.outputs.base_sha }}
             ghcr.io/coder/oss-dogfood-base:${{ matrix.image-version }}-${{ steps.docker-tag-name.outputs.tag }}
 
-      - name: Build mise oci layer
+      - name: Install mise tools
         if: matrix.image-version != 'nix'
+        # `mise oci build` packages already-installed tools into OCI
+        # layers; it does not install them. Run `mise install` first so
+        # the tools land in MISE_DATA_DIR on the runner.
         # github_token raises aqua's API quota during tool installs.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mise install --yes
+
+      - name: Build mise oci layer
+        if: matrix.image-version != 'nix'
+        env:
           IMAGE_VERSION: ${{ matrix.image-version }}
           BASE_SHA: ${{ steps.shas.outputs.base_sha }}
           FINAL_SHA: ${{ steps.shas.outputs.final_sha }}
