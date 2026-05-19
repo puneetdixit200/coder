@@ -1,12 +1,66 @@
 import { describe, expect, it } from "vitest";
+import type * as TypesGen from "#/api/typesGenerated";
 import {
 	buildPersonalSkillMarkdown,
+	filterPersonalSkills,
 	getPersonalSkillContentSizeBytes,
 	isValidPersonalSkillName,
 	PERSONAL_SKILL_MAX_SIZE_BYTES,
 	parsePersonalSkillMarkdown,
 	tryParsePersonalSkillMarkdown,
 } from "./personalSkills";
+
+const now = "2026-05-08T00:00:00Z";
+
+const skill = (
+	name: string,
+	description: string,
+	index: number,
+): TypesGen.UserSkillMetadata => ({
+	id: `skill-${index}`,
+	name,
+	description,
+	created_at: now,
+	updated_at: now,
+});
+
+describe("filterPersonalSkills", () => {
+	const skills = [
+		skill("deploy", "Ship reviewed production changes", 0),
+		skill("reviewer", "Review changed files", 1),
+		skill("docs", "Draft deployment docs", 2),
+		skill("api-review", "Review API changes", 3),
+	];
+
+	it("sorts unfiltered skills by name", () => {
+		expect(filterPersonalSkills(skills, "").map(({ name }) => name)).toEqual([
+			"api-review",
+			"deploy",
+			"docs",
+			"reviewer",
+		]);
+	});
+
+	it("ranks prefix, name substring, then description matches", () => {
+		expect(filterPersonalSkills(skills, "rev").map(({ name }) => name)).toEqual(
+			["reviewer", "api-review", "deploy"],
+		);
+	});
+
+	it("matches names and descriptions case-insensitively", () => {
+		const mixedCaseSkills = [
+			skill("deploy-bot", "Ship Changes", 0),
+			skill("docs", "Review docs", 1),
+		];
+
+		expect(
+			filterPersonalSkills(mixedCaseSkills, "DEP").map(({ name }) => name),
+		).toEqual(["deploy-bot"]);
+		expect(
+			filterPersonalSkills(mixedCaseSkills, "changes").map(({ name }) => name),
+		).toEqual(["deploy-bot"]);
+	});
+});
 
 describe("parsePersonalSkillMarkdown", () => {
 	it("parses SKILL.md frontmatter and body", () => {

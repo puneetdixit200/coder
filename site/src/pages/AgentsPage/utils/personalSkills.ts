@@ -1,3 +1,5 @@
+import type * as TypesGen from "#/api/typesGenerated";
+
 export const PERSONAL_SKILL_MAX_SIZE_BYTES = 64 * 1024;
 export const PERSONAL_SKILLS_MAX_PER_USER = 100;
 
@@ -8,6 +10,51 @@ export type PersonalSkillFormValues = {
 	name: string;
 	description: string;
 	body: string;
+};
+
+type RankedPersonalSkill = {
+	skill: TypesGen.UserSkillMetadata;
+	rank: number;
+	index: number;
+};
+
+/**
+ * Filters personal skills by name and description. Matches are ranked by
+ * name prefix, name substring, then description substring.
+ */
+export const filterPersonalSkills = (
+	skills: readonly TypesGen.UserSkillMetadata[],
+	query: string,
+): TypesGen.UserSkillMetadata[] => {
+	const normalizedQuery = query.toLocaleLowerCase("en-US");
+	if (!normalizedQuery) {
+		return skills.toSorted((a, b) => a.name.localeCompare(b.name, "en-US"));
+	}
+
+	return skills
+		.map((skill, index): RankedPersonalSkill => {
+			const name = skill.name.toLocaleLowerCase("en-US");
+			const description = skill.description.toLocaleLowerCase("en-US");
+			let rank = Number.POSITIVE_INFINITY;
+			if (name.startsWith(normalizedQuery)) {
+				rank = 0;
+			} else if (name.includes(normalizedQuery)) {
+				rank = 1;
+			} else if (description.includes(normalizedQuery)) {
+				rank = 2;
+			}
+
+			return { skill, rank, index };
+		})
+		.filter(({ rank }) => Number.isFinite(rank))
+		.toSorted((a, b) => {
+			if (a.rank !== b.rank) {
+				return a.rank - b.rank;
+			}
+			const nameOrder = a.skill.name.localeCompare(b.skill.name, "en-US");
+			return nameOrder === 0 ? a.index - b.index : nameOrder;
+		})
+		.map(({ skill }) => skill);
 };
 
 class PersonalSkillMarkdownError extends Error {}
