@@ -4,12 +4,10 @@
 # install of mise. CI runs `mise oci` directly on its Linux runner; it
 # does not use this script.
 #
-# Uses jdxcode/mise:latest rather than a version pin because the mise
-# project does not publish a Docker tag for every release (the binary
-# version baked into Dockerfile.base, v2026.4.19, has no corresponding
-# Docker image). Since `mise oci` only constructs OCI layers and never
-# affects the mise binary already in the base image, a wrapper-host
-# version drift is harmless.
+# Uses jdxcode/mise:latest because the mise project does not publish a
+# Docker tag for every release. Since `mise oci` only constructs OCI
+# layers and never affects the mise binary already in the base image,
+# a wrapper-host version drift is harmless.
 #
 # Honors CONTAINER_RUNTIME=docker (default) or CONTAINER_RUNTIME=container
 # (Apple's `container` CLI on macOS). Sets --platform linux/amd64 for
