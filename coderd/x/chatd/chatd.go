@@ -228,6 +228,7 @@ type Server struct {
 	pubsub                         pubsub.Pubsub
 	webpushDispatcher              webpush.Dispatcher
 	providerAPIKeys                chatprovider.ProviderAPIKeys
+	allowBYOK                      bool
 	oidcTokenSource                mcpclient.UserOIDCTokenSource
 	debugSvc                       *chatdebug.Service
 	debugSvcFactory                func() *chatdebug.Service
@@ -3007,9 +3008,9 @@ func (p *Server) RegenerateChatTitle(
 	// keeping chat ownership authorization at the HTTP layer.
 	//nolint:gocritic // Non-admin users need chatd-scoped config reads here.
 	chatdCtx := dbauthz.AsChatd(ctx)
-	keys, err := p.resolveUserProviderAPIKeys(chatdCtx, chat.OwnerID)
+	keys, err := p.resolveUserProviderAPIKeys(chatdCtx, chat.OwnerID, uuid.Nil)
 	if err != nil {
-		return database.Chat{}, xerrors.Errorf("resolve chat providers: %w", err)
+		keys = chatprovider.ProviderAPIKeys{}
 	}
 	if err := p.acquireManualTitleLock(ctx, chat.ID); err != nil {
 		return database.Chat{}, err
@@ -3071,9 +3072,9 @@ func (p *Server) ProposeChatTitle(
 ) (string, error) {
 	//nolint:gocritic // Non-admin users need chatd-scoped config reads here.
 	chatdCtx := dbauthz.AsChatd(ctx)
-	keys, err := p.resolveUserProviderAPIKeys(chatdCtx, chat.OwnerID)
+	keys, err := p.resolveUserProviderAPIKeys(chatdCtx, chat.OwnerID, uuid.Nil)
 	if err != nil {
-		return "", xerrors.Errorf("resolve chat providers: %w", err)
+		keys = chatprovider.ProviderAPIKeys{}
 	}
 	if err := p.acquireManualTitleLock(ctx, chat.ID); err != nil {
 		return "", err
@@ -3159,7 +3160,7 @@ func (p *Server) generateManualTitleCandidate(
 		return manualTitleCandidateResult{}, nil
 	}
 
-	model, modelConfig, err := p.resolveManualTitleModel(ctx, store, chat, keys)
+	model, modelConfig, modelKeys, err := p.resolveManualTitleModel(ctx, store, chat, keys)
 	result := manualTitleCandidateResult{
 		modelConfig: modelConfig,
 		hasMessages: true,
@@ -3177,7 +3178,7 @@ func (p *Server) generateManualTitleCandidate(
 			debugSvc,
 			chat,
 			modelConfig,
-			keys,
+			modelKeys,
 			messages,
 			model,
 		)
@@ -3539,15 +3540,15 @@ func (p *Server) resolveManualTitleModel(
 	store database.Store,
 	chat database.Chat,
 	keys chatprovider.ProviderAPIKeys,
-) (fantasy.LanguageModel, database.ChatModelConfig, error) {
-	overrideConfig, overrideModel, overrideSet, overrideErr := p.resolveTitleGenerationModelOverride(
+) (fantasy.LanguageModel, database.ChatModelConfig, chatprovider.ProviderAPIKeys, error) {
+	overrideConfig, overrideModel, overrideKeys, overrideSet, overrideErr := p.resolveTitleGenerationModelOverride(
 		ctx,
 		chat,
 		keys,
 	)
 	if overrideErr != nil {
 		if overrideSet {
-			return nil, database.ChatModelConfig{}, xerrors.Errorf(
+			return nil, database.ChatModelConfig{}, chatprovider.ProviderAPIKeys{}, xerrors.Errorf(
 				"resolve manual title generation model override: %w",
 				overrideErr,
 			)
@@ -3557,7 +3558,7 @@ func (p *Server) resolveManualTitleModel(
 			slog.Error(overrideErr),
 		)
 	} else if overrideSet {
-		return overrideModel, overrideConfig, nil
+		return overrideModel, overrideConfig, overrideKeys, nil
 	}
 
 	configs, err := store.GetEnabledChatModelConfigs(ctx)
@@ -3574,14 +3575,7 @@ func (p *Server) resolveManualTitleModel(
 		return p.resolveFallbackManualTitleModel(ctx, chat, keys)
 	}
 
-	model, err := chatprovider.ModelFromConfig(
-		config.Provider,
-		config.Model,
-		keys,
-		chatprovider.UserAgent(),
-		chatprovider.CoderHeaders(chat),
-		nil,
-	)
+	providerHint, modelKeys, err := p.resolveModelConfigProviderHintAndKeys(ctx, chat.OwnerID, config, keys)
 	if err != nil {
 		p.logger.Debug(ctx, "manual title preferred model unavailable",
 			slog.F("chat_id", chat.ID),
@@ -3591,37 +3585,58 @@ func (p *Server) resolveManualTitleModel(
 		)
 		return p.resolveFallbackManualTitleModel(ctx, chat, keys)
 	}
+	model, err := chatprovider.ModelFromConfig(
+		providerHint,
+		config.Model,
+		modelKeys,
+		chatprovider.UserAgent(),
+		chatprovider.CoderHeaders(chat),
+		nil,
+	)
+	if err != nil {
+		p.logger.Debug(ctx, "manual title preferred model unavailable",
+			slog.F("chat_id", chat.ID),
+			slog.F("provider", providerHint),
+			slog.F("model", config.Model),
+			slog.Error(err),
+		)
+		return p.resolveFallbackManualTitleModel(ctx, chat, keys)
+	}
 
-	return model, config, nil
+	return model, config, modelKeys, nil
 }
 
 func (p *Server) resolveFallbackManualTitleModel(
 	ctx context.Context,
 	chat database.Chat,
 	keys chatprovider.ProviderAPIKeys,
-) (fantasy.LanguageModel, database.ChatModelConfig, error) {
+) (fantasy.LanguageModel, database.ChatModelConfig, chatprovider.ProviderAPIKeys, error) {
 	config, err := p.resolveModelConfig(ctx, chat)
 	if err != nil {
-		return nil, database.ChatModelConfig{}, xerrors.Errorf(
+		return nil, database.ChatModelConfig{}, chatprovider.ProviderAPIKeys{}, xerrors.Errorf(
 			"resolve fallback manual title model config: %w",
 			err,
 		)
 	}
+	providerHint, modelKeys, err := p.resolveModelConfigProviderHintAndKeys(ctx, chat.OwnerID, config, keys)
+	if err != nil {
+		return nil, database.ChatModelConfig{}, chatprovider.ProviderAPIKeys{}, err
+	}
 	model, err := chatprovider.ModelFromConfig(
-		config.Provider,
+		providerHint,
 		config.Model,
-		keys,
+		modelKeys,
 		chatprovider.UserAgent(),
 		chatprovider.CoderHeaders(chat),
 		nil,
 	)
 	if err != nil {
-		return nil, database.ChatModelConfig{}, xerrors.Errorf(
+		return nil, database.ChatModelConfig{}, chatprovider.ProviderAPIKeys{}, xerrors.Errorf(
 			"create fallback manual title model: %w",
 			err,
 		)
 	}
-	return model, config, nil
+	return model, config, modelKeys, nil
 }
 
 func mergeManualTitleMessages(
@@ -4036,6 +4051,8 @@ type Config struct {
 	StopWorkspace                  chattool.StopWorkspaceFn
 	Pubsub                         pubsub.Pubsub
 	ProviderAPIKeys                chatprovider.ProviderAPIKeys
+	AllowBYOK                      bool
+	AllowBYOKSet                   bool
 	AlwaysEnableDebugLogs          bool
 	WebpushDispatcher              webpush.Dispatcher
 	UsageTracker                   *workspacestats.UsageTracker
@@ -4090,6 +4107,11 @@ func New(cfg Config) *Server {
 		workerID = uuid.New()
 	}
 
+	allowBYOK := true
+	if cfg.AllowBYOKSet {
+		allowBYOK = cfg.AllowBYOK
+	}
+
 	p := &Server{
 		cancel:                         cancel,
 		db:                             cfg.Database,
@@ -4106,6 +4128,7 @@ func New(cfg Config) *Server {
 		pubsub:                         cfg.Pubsub,
 		webpushDispatcher:              cfg.WebpushDispatcher,
 		providerAPIKeys:                cfg.ProviderAPIKeys,
+		allowBYOK:                      allowBYOK,
 		oidcTokenSource:                cfg.OIDCTokenSource,
 		debugSvcFactory: func() *chatdebug.Service {
 			debugSvc := chatdebug.NewService(
@@ -6906,10 +6929,11 @@ func (p *Server) runChat(
 	// Fire title generation asynchronously so it doesn't block the
 	// chat response. It uses a detached context so it can finish
 	// even after the chat processing context is canceled.
-	// Snapshot model, logger, and ctx before launch; all three get
-	// reassigned below (model = cuModel, logger = logger.With(...),
-	// ctx = runCtx) and the goroutine captures by reference.
+	// Snapshot model, provider keys, logger, and ctx before launch; all four get
+	// reassigned below (model = cuModel, providerKeys = computerUseProviderKeys,
+	// logger = logger.With(...), ctx = runCtx) and the goroutine captures by reference.
 	titleModel := model
+	titleProviderKeys := providerKeys
 	titleLogger := logger
 	titleCtx := context.WithoutCancel(ctx)
 	p.inflight.Add(1)
@@ -6922,7 +6946,7 @@ func (p *Server) runChat(
 			modelConfig.Provider,
 			modelConfig.Model,
 			titleModel,
-			providerKeys,
+			titleProviderKeys,
 			generatedTitle,
 			titleLogger,
 			debugSvc,
@@ -7479,6 +7503,12 @@ func (p *Server) runChat(
 	}
 
 	if isComputerUse {
+		computerUseProviderKeys, keyErr := p.resolveUserProviderAPIKeysForProviderType(ctx, chat.OwnerID, computerUseModelProvider)
+		if keyErr != nil {
+			return result, xerrors.Errorf("resolve computer use provider API keys: %w", keyErr)
+		}
+		providerKeys = computerUseProviderKeys
+
 		// Override model for computer use subagent.
 		cuModel, cuDebugEnabled, resolvedProvider, resolvedModel, cuErr := p.resolveComputerUseModel(
 			ctx,
@@ -8141,6 +8171,45 @@ func (p *Server) persistChatContextSummary(
 	return nil
 }
 
+func isProviderAPIKeysEmpty(keys chatprovider.ProviderAPIKeys) bool {
+	return keys.OpenAI == "" &&
+		keys.Anthropic == "" &&
+		len(keys.ByProvider) == 0 &&
+		len(keys.BaseURLByProvider) == 0
+}
+
+func (p *Server) resolveModelConfigProviderHintAndKeys(
+	ctx context.Context,
+	ownerID uuid.UUID,
+	modelConfig database.ChatModelConfig,
+	fallbackKeys chatprovider.ProviderAPIKeys,
+) (string, chatprovider.ProviderAPIKeys, error) {
+	providerHint := modelConfig.Provider
+	if !modelConfig.AIProviderID.Valid {
+		if !isProviderAPIKeysEmpty(fallbackKeys) && userCanUseProviderKeys(fallbackKeys, providerHint) {
+			return providerHint, fallbackKeys, nil
+		}
+		keys, err := p.resolveUserProviderAPIKeys(ctx, ownerID, uuid.Nil)
+		if err != nil {
+			return "", chatprovider.ProviderAPIKeys{}, xerrors.Errorf("resolve provider API keys: %w", err)
+		}
+		return providerHint, keys, nil
+	}
+	//nolint:gocritic // Manual title generation needs chatd-scoped provider reads for user-owned chats.
+	provider, err := p.db.GetAIProviderByID(dbauthz.AsChatd(ctx), modelConfig.AIProviderID.UUID)
+	if err != nil {
+		return "", chatprovider.ProviderAPIKeys{}, xerrors.Errorf("get AI provider: %w", err)
+	}
+	if !provider.Enabled {
+		return "", chatprovider.ProviderAPIKeys{}, xerrors.Errorf("AI provider %s is disabled", provider.ID)
+	}
+	providerKeys, err := p.resolveUserProviderAPIKeysForProvider(ctx, ownerID, provider)
+	if err != nil {
+		return "", chatprovider.ProviderAPIKeys{}, xerrors.Errorf("resolve provider API keys: %w", err)
+	}
+	return string(provider.Type), providerKeys, nil
+}
+
 func (p *Server) resolveChatModel(
 	ctx context.Context,
 	chat database.Chat,
@@ -8153,30 +8222,37 @@ func (p *Server) resolveChatModel(
 	resolvedModel string,
 	err error,
 ) {
-	var g errgroup.Group
-	g.Go(func() error {
-		var err error
-		dbConfig, err = p.resolveModelConfig(ctx, chat)
+	dbConfig, err = p.resolveModelConfig(ctx, chat)
+	if err != nil {
+		return nil, database.ChatModelConfig{}, chatprovider.ProviderAPIKeys{}, false, "", "", xerrors.Errorf("resolve model config: %w", err)
+	}
+
+	if !dbConfig.Enabled {
+		return nil, database.ChatModelConfig{}, chatprovider.ProviderAPIKeys{}, false, "", "", xerrors.Errorf("chat model config %s is disabled", dbConfig.ID)
+	}
+
+	providerHint := dbConfig.Provider
+	var keyErr error
+	if dbConfig.AIProviderID.Valid {
+		provider, err := p.db.GetAIProviderByID(ctx, dbConfig.AIProviderID.UUID)
 		if err != nil {
-			return xerrors.Errorf("resolve model config: %w", err)
+			return nil, database.ChatModelConfig{}, chatprovider.ProviderAPIKeys{}, false, "", "", xerrors.Errorf("get AI provider: %w", err)
 		}
-		return nil
-	})
-	g.Go(func() error {
-		var err error
-		keys, err = p.resolveUserProviderAPIKeys(ctx, chat.OwnerID)
-		if err != nil {
-			return xerrors.Errorf("resolve provider API keys: %w", err)
+		if !provider.Enabled {
+			return nil, database.ChatModelConfig{}, chatprovider.ProviderAPIKeys{}, false, "", "", xerrors.Errorf("AI provider %s is disabled", provider.ID)
 		}
-		return nil
-	})
-	if err := g.Wait(); err != nil {
-		return nil, database.ChatModelConfig{}, chatprovider.ProviderAPIKeys{}, false, "", "", err
+		providerHint = string(provider.Type)
+		keys, keyErr = p.resolveUserProviderAPIKeysForProvider(ctx, chat.OwnerID, provider)
+	} else {
+		keys, keyErr = p.resolveUserProviderAPIKeys(ctx, chat.OwnerID, uuid.Nil)
+	}
+	if keyErr != nil {
+		return nil, database.ChatModelConfig{}, chatprovider.ProviderAPIKeys{}, false, "", "", xerrors.Errorf("resolve provider API keys: %w", keyErr)
 	}
 
 	resolvedProvider, resolvedModel, err = chatprovider.ResolveModelWithProviderHint(
 		dbConfig.Model,
-		dbConfig.Provider,
+		providerHint,
 	)
 	if err != nil {
 		return nil, database.ChatModelConfig{}, chatprovider.ProviderAPIKeys{}, false, "", "", xerrors.Errorf(
@@ -8187,7 +8263,7 @@ func (p *Server) resolveChatModel(
 	model, debugEnabled, err = p.newDebugAwareModelFromConfig(
 		ctx,
 		chat,
-		dbConfig.Provider,
+		providerHint,
 		dbConfig.Model,
 		keys,
 		chatprovider.UserAgent(),
@@ -8201,10 +8277,113 @@ func (p *Server) resolveChatModel(
 	return model, dbConfig, keys, debugEnabled, resolvedProvider, resolvedModel, nil
 }
 
+func (p *Server) aiProviderConfig(ctx context.Context, provider database.AIProvider) (chatprovider.ConfiguredProvider, error) {
+	if !provider.Enabled {
+		return chatprovider.ConfiguredProvider{}, xerrors.Errorf("AI provider %s is disabled", provider.ID)
+	}
+	keys, err := p.db.GetAIProviderKeysByProviderID(ctx, provider.ID)
+	if err != nil {
+		return chatprovider.ConfiguredProvider{}, xerrors.Errorf("get AI provider keys: %w", err)
+	}
+	apiKey := ""
+	// GetAIProviderKeysByProviderID orders keys oldest first. chatd consumes
+	// one provider-scoped key because runtime provider config has one API key slot.
+	for _, key := range keys {
+		if key.APIKey != "" {
+			apiKey = key.APIKey
+			break
+		}
+	}
+	return chatprovider.ConfiguredProvider{
+		ProviderID:                 provider.ID,
+		Provider:                   string(provider.Type),
+		APIKey:                     apiKey,
+		BaseURL:                    provider.BaseUrl,
+		CentralAPIKeyEnabled:       true,
+		AllowUserAPIKey:            p.allowBYOK,
+		AllowCentralAPIKeyFallback: true,
+	}, nil
+}
+
+func (p *Server) resolveUserProviderAPIKeysForProvider(
+	ctx context.Context,
+	ownerID uuid.UUID,
+	provider database.AIProvider,
+) (chatprovider.ProviderAPIKeys, error) {
+	configuredProvider, err := p.aiProviderConfig(ctx, provider)
+	if err != nil {
+		return chatprovider.ProviderAPIKeys{}, err
+	}
+	userKeys := []chatprovider.UserProviderKey{}
+	if p.allowBYOK {
+		userKey, err := p.db.GetUserAIProviderKeyByProviderID(ctx, database.GetUserAIProviderKeyByProviderIDParams{
+			UserID:       ownerID,
+			AIProviderID: provider.ID,
+		})
+		if err != nil && !xerrors.Is(err, sql.ErrNoRows) {
+			return chatprovider.ProviderAPIKeys{}, xerrors.Errorf("get user AI provider key: %w", err)
+		}
+		if err == nil {
+			userKeys = append(userKeys, chatprovider.UserProviderKey{
+				ChatProviderID: userKey.AIProviderID,
+				APIKey:         userKey.APIKey,
+			})
+		}
+	}
+	keys, _ := chatprovider.ResolveUserProviderKeys(
+		chatprovider.ProviderAPIKeys{},
+		[]chatprovider.ConfiguredProvider{configuredProvider},
+		userKeys,
+	)
+	enabledProviders := map[string]struct{}{}
+	normalizedProvider := chatprovider.NormalizeProvider(configuredProvider.Provider)
+	if normalizedProvider != "" {
+		enabledProviders[normalizedProvider] = struct{}{}
+	}
+	chatprovider.PruneDisabledProviderKeys(&keys, enabledProviders)
+	return keys, nil
+}
+
+func (p *Server) resolveUserProviderAPIKeysForProviderType(
+	ctx context.Context,
+	ownerID uuid.UUID,
+	providerType string,
+) (chatprovider.ProviderAPIKeys, error) {
+	providers, err := p.db.GetAIProviders(ctx, database.GetAIProvidersParams{})
+	if err != nil {
+		return chatprovider.ProviderAPIKeys{}, xerrors.Errorf("get enabled AI providers: %w", err)
+	}
+	normalizedProviderType := chatprovider.NormalizeProvider(providerType)
+	for _, provider := range providers {
+		if chatprovider.NormalizeProvider(string(provider.Type)) != normalizedProviderType {
+			continue
+		}
+		keys, err := p.resolveUserProviderAPIKeysForProvider(ctx, ownerID, provider)
+		if err != nil {
+			return chatprovider.ProviderAPIKeys{}, err
+		}
+		if userCanUseProviderKeys(keys, normalizedProviderType) {
+			return keys, nil
+		}
+	}
+	return p.resolveUserProviderAPIKeys(ctx, ownerID, uuid.Nil)
+}
+
 func (p *Server) resolveUserProviderAPIKeys(
 	ctx context.Context,
 	ownerID uuid.UUID,
+	selectedAIProviderID uuid.UUID,
 ) (chatprovider.ProviderAPIKeys, error) {
+	var configuredProviders []chatprovider.ConfiguredProvider
+	userKeys := []chatprovider.UserProviderKey{}
+
+	if selectedAIProviderID != uuid.Nil {
+		provider, err := p.db.GetAIProviderByID(ctx, selectedAIProviderID)
+		if err != nil {
+			return chatprovider.ProviderAPIKeys{}, xerrors.Errorf("get AI provider: %w", err)
+		}
+		return p.resolveUserProviderAPIKeysForProvider(ctx, ownerID, provider)
+	}
 	providers, err := p.configCache.EnabledProviders(ctx)
 	if err != nil {
 		return chatprovider.ProviderAPIKeys{}, xerrors.Errorf(
@@ -8212,7 +8391,7 @@ func (p *Server) resolveUserProviderAPIKeys(
 			err,
 		)
 	}
-	configuredProviders := make(
+	configuredProviders = make(
 		[]chatprovider.ConfiguredProvider, 0, len(providers),
 	)
 	for _, provider := range providers {
@@ -8235,8 +8414,6 @@ func (p *Server) resolveUserProviderAPIKeys(
 			break
 		}
 	}
-
-	userKeys := []chatprovider.UserProviderKey{}
 	if allowAnyUserAPIKey {
 		userKeyRows, err := p.db.GetUserChatProviderKeys(ctx, ownerID)
 		if err != nil {
@@ -8253,6 +8430,7 @@ func (p *Server) resolveUserProviderAPIKeys(
 			})
 		}
 	}
+
 	keys, _ := chatprovider.ResolveUserProviderKeys(
 		p.providerAPIKeys,
 		configuredProviders,

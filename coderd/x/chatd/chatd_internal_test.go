@@ -1112,7 +1112,7 @@ func TestResolveUserProviderAPIKeys_StripsDisabledFallbackKeys(t *testing.T) {
 		AllowCentralApiKeyFallback: true,
 	}}, nil)
 
-	keys, err := server.resolveUserProviderAPIKeys(ctx, ownerID)
+	keys, err := server.resolveUserProviderAPIKeys(ctx, ownerID, uuid.Nil)
 	require.NoError(t, err)
 	require.Empty(t, keys.OpenAI)
 	require.Empty(t, keys.APIKey("openai"))
@@ -1122,6 +1122,40 @@ func TestResolveUserProviderAPIKeys_StripsDisabledFallbackKeys(t *testing.T) {
 	require.Equal(t, "https://anthropic.example.com", keys.BaseURL("anthropic"))
 	require.Equal(t, map[string]string{"anthropic": "anthropic-deployment-key"}, keys.ByProvider)
 	require.Equal(t, map[string]string{"anthropic": "https://anthropic.example.com"}, keys.BaseURLByProvider)
+}
+
+func TestResolveUserProviderAPIKeys_SelectedAIProviderDoesNotUseDeploymentFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx := testutil.Context(t, testutil.WaitShort)
+	ctrl := gomock.NewController(t)
+	db := dbmock.NewMockStore(ctrl)
+	ownerID := uuid.New()
+	providerID := uuid.New()
+
+	server := &Server{
+		db: db,
+		providerAPIKeys: chatprovider.ProviderAPIKeys{
+			OpenAI: "openai-deployment-key",
+			ByProvider: map[string]string{
+				"openai": "openai-deployment-key",
+			},
+		},
+	}
+
+	db.EXPECT().GetAIProviderByID(gomock.Any(), providerID).Return(database.AIProvider{
+		ID:      providerID,
+		Type:    database.AiProviderTypeOpenai,
+		Name:    "agents-openai",
+		Enabled: true,
+	}, nil)
+	db.EXPECT().GetAIProviderKeysByProviderID(gomock.Any(), providerID).Return(nil, nil)
+
+	keys, err := server.resolveUserProviderAPIKeys(ctx, ownerID, providerID)
+	require.NoError(t, err)
+	require.Empty(t, keys.OpenAI)
+	require.Empty(t, keys.APIKey("openai"))
+	require.False(t, keys.HasProvider("openai"))
 }
 
 func TestResolveUserProviderAPIKeys_SkipsUserKeyLookupWhenNoProviderAllowsUserKeys(t *testing.T) {
@@ -1152,7 +1186,7 @@ func TestResolveUserProviderAPIKeys_SkipsUserKeyLookupWhenNoProviderAllowsUserKe
 		CentralApiKeyEnabled: true,
 	}}, nil)
 
-	keys, err := server.resolveUserProviderAPIKeys(ctx, ownerID)
+	keys, err := server.resolveUserProviderAPIKeys(ctx, ownerID, uuid.Nil)
 	require.NoError(t, err)
 	require.Equal(t, "openai-deployment-key", keys.OpenAI)
 	require.Equal(t, "openai-deployment-key", keys.APIKey("openai"))
