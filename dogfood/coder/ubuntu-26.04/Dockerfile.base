@@ -37,6 +37,7 @@ RUN sed -i 's|http://archive.ubuntu.com/ubuntu/|http://mirrors.edge.kernel.org/u
 	bat \
 	bats \
 	bind9-dnsutils \
+	bison \
 	build-essential \
 	ca-certificates \
 	containerd.io \
@@ -49,6 +50,7 @@ RUN sed -i 's|http://archive.ubuntu.com/ubuntu/|http://mirrors.edge.kernel.org/u
 	fd-find \
 	file \
 	fish \
+	flex \
 	gettext-base \
 	git \
 	gnupg \
@@ -65,6 +67,8 @@ RUN sed -i 's|http://archive.ubuntu.com/ubuntu/|http://mirrors.edge.kernel.org/u
 	language-pack-en \
 	less \
 	libgbm-dev \
+	libicu-dev \
+	libreadline-dev \
 	libssl-dev \
 	lsb-release \
 	lsof \
@@ -92,10 +96,12 @@ RUN sed -i 's|http://archive.ubuntu.com/ubuntu/|http://mirrors.edge.kernel.org/u
 	tmux \
 	traceroute \
 	unzip \
+	uuid-dev \
 	vim \
 	wget \
 	xauth \
 	zip \
+	zlib1g-dev \
 	zsh \
 	zstd && \
 	# Keep Docker's engine, CLI, runtime, and plugins on the versions selected by
