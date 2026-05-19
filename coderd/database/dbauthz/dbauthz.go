@@ -2260,6 +2260,18 @@ func (q *querier) DeleteTask(ctx context.Context, arg database.DeleteTaskParams)
 	return q.db.DeleteTask(ctx, arg)
 }
 
+func (q *querier) DeleteUserAIBudgetOverride(ctx context.Context, userID uuid.UUID) (database.UserAiBudgetOverride, error) {
+	// Removing a user's AI budget override counts as updating the user.
+	u, err := q.db.GetUserByID(ctx, userID)
+	if err != nil {
+		return database.UserAiBudgetOverride{}, err
+	}
+	if err := q.authorizeContext(ctx, policy.ActionUpdate, u); err != nil {
+		return database.UserAiBudgetOverride{}, err
+	}
+	return q.db.DeleteUserAIBudgetOverride(ctx, userID)
+}
+
 func (q *querier) DeleteUserChatCompactionThreshold(ctx context.Context, arg database.DeleteUserChatCompactionThresholdParams) error {
 	u, err := q.db.GetUserByID(ctx, arg.UserID)
 	if err != nil {
@@ -3442,6 +3454,18 @@ func (q *querier) GetGroupByOrgAndName(ctx context.Context, arg database.GetGrou
 	return fetch(q.log, q.auth, q.db.GetGroupByOrgAndName)(ctx, arg)
 }
 
+func (q *querier) GetGroupMember(ctx context.Context, arg database.GetGroupMemberParams) (database.GroupMemberTable, error) {
+	// Reading a group membership requires read on the parent group.
+	group, err := q.db.GetGroupByID(ctx, arg.GroupID)
+	if err != nil {
+		return database.GroupMemberTable{}, err
+	}
+	if err := q.authorizeContext(ctx, policy.ActionRead, group); err != nil {
+		return database.GroupMemberTable{}, err
+	}
+	return q.db.GetGroupMember(ctx, arg)
+}
+
 func (q *querier) GetGroupMembers(ctx context.Context, includeSystem bool) ([]database.GroupMember, error) {
 	if err := q.authorizeContext(ctx, policy.ActionRead, rbac.ResourceSystem); err != nil {
 		return nil, err
@@ -4454,6 +4478,18 @@ func (q *querier) GetUnexpiredLicenses(ctx context.Context) ([]database.License,
 		return nil, err
 	}
 	return q.db.GetUnexpiredLicenses(ctx)
+}
+
+func (q *querier) GetUserAIBudgetOverride(ctx context.Context, userID uuid.UUID) (database.UserAiBudgetOverride, error) {
+	// Reading a user's AI budget override requires read on the parent user.
+	u, err := q.db.GetUserByID(ctx, userID)
+	if err != nil {
+		return database.UserAiBudgetOverride{}, err
+	}
+	if err := q.authorizeContext(ctx, policy.ActionRead, u); err != nil {
+		return database.UserAiBudgetOverride{}, err
+	}
+	return q.db.GetUserAIBudgetOverride(ctx, userID)
 }
 
 func (q *querier) GetUserAISeatStates(ctx context.Context, userIDs []uuid.UUID) ([]uuid.UUID, error) {
@@ -8181,6 +8217,18 @@ func (q *querier) UpsertTemplateUsageStats(ctx context.Context) error {
 		return err
 	}
 	return q.db.UpsertTemplateUsageStats(ctx)
+}
+
+func (q *querier) UpsertUserAIBudgetOverride(ctx context.Context, arg database.UpsertUserAIBudgetOverrideParams) (database.UserAiBudgetOverride, error) {
+	// Setting a user's AI budget override counts as updating the user.
+	u, err := q.db.GetUserByID(ctx, arg.UserID)
+	if err != nil {
+		return database.UserAiBudgetOverride{}, err
+	}
+	if err := q.authorizeContext(ctx, policy.ActionUpdate, u); err != nil {
+		return database.UserAiBudgetOverride{}, err
+	}
+	return q.db.UpsertUserAIBudgetOverride(ctx, arg)
 }
 
 func (q *querier) UpsertUserChatDebugLoggingEnabled(ctx context.Context, arg database.UpsertUserChatDebugLoggingEnabledParams) error {

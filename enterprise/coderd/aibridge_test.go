@@ -2871,6 +2871,197 @@ func TestGroupAIBudget(t *testing.T) {
 	})
 }
 
+func TestUserAIBudgetOverride(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Upsert", func(t *testing.T) {
+		t.Parallel()
+
+		adminClient, target, group := setupUserAIBudgetOverrideTest(t)
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		// First upsert creates the override.
+		newOverride, err := adminClient.UpsertUserAIBudgetOverride(ctx, target.ID, codersdk.UpsertUserAIBudgetOverrideRequest{
+			GroupID:          group.ID,
+			SpendLimitMicros: 500_000_000,
+		})
+		require.NoError(t, err)
+		require.Equal(t, target.ID, newOverride.UserID)
+		require.Equal(t, group.ID, newOverride.GroupID)
+		require.EqualValues(t, 500_000_000, newOverride.SpendLimitMicros)
+		require.False(t, newOverride.CreatedAt.IsZero())
+
+		// Second upsert updates the existing override.
+		updatedOverride, err := adminClient.UpsertUserAIBudgetOverride(ctx, target.ID, codersdk.UpsertUserAIBudgetOverrideRequest{
+			GroupID:          group.ID,
+			SpendLimitMicros: 1_000_000_000,
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1_000_000_000, updatedOverride.SpendLimitMicros)
+		require.False(t, updatedOverride.UpdatedAt.Before(newOverride.UpdatedAt))
+
+		// GET returns the latest value.
+		currentOverride, err := adminClient.UserAIBudgetOverride(ctx, target.ID)
+		require.NoError(t, err)
+		require.EqualValues(t, 1_000_000_000, currentOverride.SpendLimitMicros)
+	})
+
+	t.Run("GetWhenAbsent_404", func(t *testing.T) {
+		t.Parallel()
+
+		adminClient, target, _ := setupUserAIBudgetOverrideTest(t)
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		_, err := adminClient.UserAIBudgetOverride(ctx, target.ID)
+		var sdkErr *codersdk.Error
+		require.ErrorAs(t, err, &sdkErr)
+		require.Equal(t, http.StatusNotFound, sdkErr.StatusCode())
+	})
+
+	t.Run("DeleteWhenAbsent_404", func(t *testing.T) {
+		t.Parallel()
+
+		adminClient, target, _ := setupUserAIBudgetOverrideTest(t)
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		err := adminClient.DeleteUserAIBudgetOverride(ctx, target.ID)
+		var sdkErr *codersdk.Error
+		require.ErrorAs(t, err, &sdkErr)
+		require.Equal(t, http.StatusNotFound, sdkErr.StatusCode())
+	})
+
+	t.Run("DeleteWhenPresent", func(t *testing.T) {
+		t.Parallel()
+
+		adminClient, target, group := setupUserAIBudgetOverrideTest(t)
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		_, err := adminClient.UpsertUserAIBudgetOverride(ctx, target.ID, codersdk.UpsertUserAIBudgetOverrideRequest{
+			GroupID:          group.ID,
+			SpendLimitMicros: 500_000_000,
+		})
+		require.NoError(t, err)
+
+		require.NoError(t, adminClient.DeleteUserAIBudgetOverride(ctx, target.ID))
+
+		_, err = adminClient.UserAIBudgetOverride(ctx, target.ID)
+		var sdkErr *codersdk.Error
+		require.ErrorAs(t, err, &sdkErr)
+		require.Equal(t, http.StatusNotFound, sdkErr.StatusCode())
+	})
+
+	t.Run("RejectsNegativeSpendLimit", func(t *testing.T) {
+		t.Parallel()
+
+		adminClient, target, group := setupUserAIBudgetOverrideTest(t)
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		_, err := adminClient.UpsertUserAIBudgetOverride(ctx, target.ID, codersdk.UpsertUserAIBudgetOverrideRequest{
+			GroupID:          group.ID,
+			SpendLimitMicros: -1,
+		})
+		var sdkErr *codersdk.Error
+		require.ErrorAs(t, err, &sdkErr)
+		require.Equal(t, http.StatusBadRequest, sdkErr.StatusCode())
+	})
+
+	t.Run("AcceptsZeroSpendLimitToBlock", func(t *testing.T) {
+		t.Parallel()
+
+		adminClient, target, group := setupUserAIBudgetOverrideTest(t)
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		// 0 is a valid value: it blocks all spend for the user.
+		override, err := adminClient.UpsertUserAIBudgetOverride(ctx, target.ID, codersdk.UpsertUserAIBudgetOverrideRequest{
+			GroupID:          group.ID,
+			SpendLimitMicros: 0,
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 0, override.SpendLimitMicros)
+	})
+
+	t.Run("UnknownUser_404", func(t *testing.T) {
+		t.Parallel()
+
+		adminClient, _, _ := setupUserAIBudgetOverrideTest(t)
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		_, err := adminClient.UserAIBudgetOverride(ctx, uuid.New())
+		var sdkErr *codersdk.Error
+		require.ErrorAs(t, err, &sdkErr)
+		require.Equal(t, http.StatusNotFound, sdkErr.StatusCode())
+	})
+
+	t.Run("RejectsNonMemberGroup", func(t *testing.T) {
+		t.Parallel()
+
+		adminClient, target, _ := setupUserAIBudgetOverrideTest(t)
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		// Create a second group the target is NOT a member of.
+		outsiderGroup, err := adminClient.CreateGroup(ctx, target.OrganizationIDs[0], codersdk.CreateGroupRequest{
+			Name: "outsider-group",
+		})
+		require.NoError(t, err)
+
+		_, err = adminClient.UpsertUserAIBudgetOverride(ctx, target.ID, codersdk.UpsertUserAIBudgetOverrideRequest{
+			GroupID:          outsiderGroup.ID,
+			SpendLimitMicros: 500_000_000,
+		})
+		var sdkErr *codersdk.Error
+		require.ErrorAs(t, err, &sdkErr)
+		require.Equal(t, http.StatusBadRequest, sdkErr.StatusCode())
+	})
+
+	t.Run("RejectsUnknownGroup", func(t *testing.T) {
+		t.Parallel()
+
+		adminClient, target, _ := setupUserAIBudgetOverrideTest(t)
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		// A group_id that doesn't exist (or that the caller can't see)
+		// is rejected by the visibility check before the membership check.
+		_, err := adminClient.UpsertUserAIBudgetOverride(ctx, target.ID, codersdk.UpsertUserAIBudgetOverrideRequest{
+			GroupID:          uuid.New(),
+			SpendLimitMicros: 500_000_000,
+		})
+		var sdkErr *codersdk.Error
+		require.ErrorAs(t, err, &sdkErr)
+		require.Equal(t, http.StatusNotFound, sdkErr.StatusCode())
+	})
+}
+
+// setupUserAIBudgetOverrideTest returns an Admin client, a target user, and a
+// group the target user is a member of.
+func setupUserAIBudgetOverrideTest(t *testing.T) (adminClient *codersdk.Client, target codersdk.User, group codersdk.Group) {
+	t.Helper()
+
+	dv := coderdtest.DeploymentValues(t)
+	dv.AI.BridgeConfig.Enabled = serpent.Bool(true)
+	ownerClient, owner := coderdenttest.New(t, &coderdenttest.Options{
+		Options: &coderdtest.Options{DeploymentValues: dv},
+		LicenseOptions: &coderdenttest.LicenseOptions{
+			Features: license.Features{
+				codersdk.FeatureTemplateRBAC: 1,
+				codersdk.FeatureAIBridge:     1,
+			},
+		},
+	})
+	adminClient, _ = coderdtest.CreateAnotherUser(t, ownerClient, owner.OrganizationID, rbac.RoleUserAdmin())
+	_, target = coderdtest.CreateAnotherUser(t, ownerClient, owner.OrganizationID)
+
+	ctx := testutil.Context(t, testutil.WaitLong)
+	g, err := adminClient.CreateGroup(ctx, owner.OrganizationID, codersdk.CreateGroupRequest{
+		Name: "override-test-group",
+	})
+	require.NoError(t, err)
+	g, err = adminClient.PatchGroup(ctx, g.ID, codersdk.PatchGroupRequest{
+		AddUsers: []string{target.ID.String()},
+	})
+	require.NoError(t, err)
+	return adminClient, target, g
+}
+
 // setupGroupAIBudgetTest returns an Admin client along with a newly created group inside it.
 func setupGroupAIBudgetTest(t *testing.T) (adminClient *codersdk.Client, group codersdk.Group) {
 	t.Helper()
