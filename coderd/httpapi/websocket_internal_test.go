@@ -342,7 +342,7 @@ func TestWSWatcher(t *testing.T) {
 		}
 
 		w := &WSWatcher{rec: rec.record, clk: mClock, interval: time.Second}
-		watchCtx := w.watch(ctx, logger, fConn)
+		watchCtx := w.Watch(ctx, logger, fConn)
 
 		trap.MustWait(ctx).MustRelease(ctx)
 		mClock.Advance(time.Second).MustWait(ctx)

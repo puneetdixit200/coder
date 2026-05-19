@@ -32,9 +32,9 @@ const (
 // It may be nil, in which case probes are still run but not recorded.
 type ProbeRecorder func(ctx context.Context, result ProbeResult)
 
-// pingCloser is the minimal interface for WebSocket liveness probing.
+// PingCloser is the minimal interface for WebSocket liveness probing.
 // *websocket.Conn satisfies this interface.
-type pingCloser interface {
+type PingCloser interface {
 	Ping(ctx context.Context) error
 	Close(code websocket.StatusCode, reason string) error
 }
@@ -65,16 +65,10 @@ func NewWSWatcher(clk quartz.Clock, rec ProbeRecorder) *WSWatcher {
 // canceled when parent is canceled or when conn fails a probe.
 // Watch closes conn on probe failure with StatusGoingAway; the
 // caller owns close on normal teardown.
-func (w *WSWatcher) Watch(parent context.Context, log slog.Logger, conn *websocket.Conn) context.Context {
+func (w *WSWatcher) Watch(parent context.Context, log slog.Logger, conn PingCloser) context.Context {
 	if w == nil {
 		panic("developer error: WSWatcher is nil")
 	}
-	return w.watch(parent, log, conn)
-}
-
-// watch is the internal implementation that accepts pingCloser,
-// enabling unit tests to inject fake connections.
-func (w *WSWatcher) watch(parent context.Context, log slog.Logger, conn pingCloser) context.Context {
 	ctx, cancel := context.WithCancel(parent)
 	go func() {
 		defer cancel()
@@ -83,7 +77,7 @@ func (w *WSWatcher) watch(parent context.Context, log slog.Logger, conn pingClos
 	return ctx
 }
 
-func (w *WSWatcher) supervise(ctx context.Context, log slog.Logger, conn pingCloser) {
+func (w *WSWatcher) supervise(ctx context.Context, log slog.Logger, conn PingCloser) {
 	ticker := w.clk.NewTicker(w.interval, "WSWatcher")
 	defer ticker.Stop()
 
@@ -112,7 +106,7 @@ func (w *WSWatcher) supervise(ctx context.Context, log slog.Logger, conn pingClo
 	}
 }
 
-func probe(ctx context.Context, conn pingCloser, timeout time.Duration) (ProbeResult, error) {
+func probe(ctx context.Context, conn PingCloser, timeout time.Duration) (ProbeResult, error) {
 	pingCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	err := conn.Ping(pingCtx)

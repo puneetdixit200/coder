@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/coder/websocket"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -36,6 +35,7 @@ import (
 	tailnetproto "github.com/coder/coder/v2/tailnet/proto"
 	"github.com/coder/coder/v2/testutil"
 	"github.com/coder/quartz"
+	"github.com/coder/websocket"
 )
 
 // updateGoldenFiles is a flag that can be set to update golden files.
