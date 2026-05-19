@@ -88,7 +88,7 @@ const setupChatSpies = (state: {
 		async (req) => {
 			const created = createProviderConfig({
 				id: `provider-${Date.now()}`,
-				provider: req.provider,
+				provider: req.provider ?? "",
 				display_name: req.display_name ?? "",
 				has_api_key: (req.api_key ?? "").trim().length > 0,
 				central_api_key_enabled: req.central_api_key_enabled ?? true,
@@ -99,7 +99,9 @@ const setupChatSpies = (state: {
 				source: "database",
 			});
 			state.providerConfigs = [
-				...state.providerConfigs.filter((p) => p.provider !== req.provider),
+				...state.providerConfigs.filter(
+					(p) => !(p.id === nilProviderConfigID && p.provider === req.provider),
+				),
 				created,
 			];
 			return created;
@@ -152,7 +154,7 @@ const setupChatSpies = (state: {
 		async (req) => {
 			const created = createModelConfig({
 				id: `model-${state.modelConfigs.length + 1}`,
-				provider: req.provider,
+				provider: req.provider ?? "",
 				model: req.model,
 				display_name: req.display_name || req.model,
 				enabled: req.enabled ?? true,
@@ -268,6 +270,100 @@ export const ProviderAccordionCards: Story = {
 	},
 };
 
+export const AddProviderFromMenu: Story = {
+	render: function AddProviderFromMenu(args) {
+		const [providerConfigsData, setProviderConfigsData] = useState(
+			args.providerConfigsData,
+		);
+
+		const handleCreateProvider: ChatModelAdminPanelStoryProps["onCreateProvider"] =
+			async (req) => {
+				const created = createProviderConfig({
+					id: `provider-${req.provider}`,
+					provider: req.provider ?? "",
+					display_name: req.display_name ?? "",
+					has_api_key: (req.api_key ?? "").trim().length > 0,
+					central_api_key_enabled: req.central_api_key_enabled ?? true,
+					allow_user_api_key: req.allow_user_api_key ?? true,
+					allow_central_api_key_fallback:
+						req.allow_central_api_key_fallback ?? true,
+					base_url: req.base_url ?? "",
+					source: "database",
+				});
+				await args.onCreateProvider(req);
+				setProviderConfigsData((current) => [...(current ?? []), created]);
+				return created;
+			};
+
+		return (
+			<ChatModelAdminPanel
+				{...args}
+				providerConfigsData={providerConfigsData}
+				onCreateProvider={handleCreateProvider}
+			/>
+		);
+	},
+	args: {
+		section: "providers" as ChatModelAdminSection,
+		sectionLabel: "Providers",
+		sectionDescription:
+			"Connect third-party LLM services like OpenAI, Anthropic, or Google.",
+		providerConfigsData: [
+			createProviderConfig({
+				id: "provider-anthropic",
+				provider: "anthropic",
+				display_name: "Anthropic Migration Test",
+				has_api_key: true,
+				allow_user_api_key: true,
+			}),
+			createProviderConfig({
+				id: "provider-openai",
+				provider: "openai",
+				display_name: "OpenAI Migration Test",
+				has_api_key: true,
+				allow_user_api_key: true,
+			}),
+			createProviderConfig({
+				id: "provider-openai-compatible",
+				provider: "openai-compat",
+				display_name: "OpenAI Compatible Migration Test",
+				has_api_key: true,
+				allow_user_api_key: true,
+			}),
+		],
+		modelCatalogData: { providers: [] },
+	},
+	play: async ({ canvasElement, args }) => {
+		const body = within(canvasElement.ownerDocument.body);
+
+		await userEvent.click(
+			await body.findByRole("button", { name: "Add provider" }),
+		);
+		await userEvent.click(
+			await body.findByRole("menuitem", { name: /Google/i }),
+		);
+
+		expect(await body.findByLabelText(/^API Key$/i)).toBeInTheDocument();
+		await userEvent.click(
+			await body.findByRole("button", { name: "Create provider config" }),
+		);
+
+		await waitFor(() => {
+			expect(args.onCreateProvider).toHaveBeenCalledWith(
+				expect.objectContaining({ provider: "google" }),
+			);
+		});
+		await waitFor(() => {
+			expect(body.getByRole("button", { name: "Save changes" })).toBeDisabled();
+		});
+
+		await userEvent.click(body.getByText("Back"));
+		expect(
+			await body.findByRole("button", { name: "Google" }),
+		).toBeInTheDocument();
+	},
+};
+
 export const EnvPresetProviders: Story = {
 	args: {
 		section: "providers" as ChatModelAdminSection,
@@ -346,10 +442,9 @@ export const CreateAndUpdateProvider: Story = {
 
 		const handleCreateProvider: ChatModelAdminPanelStoryProps["onCreateProvider"] =
 			async (req) => {
-				const result = await args.onCreateProvider(req);
 				const created = createProviderConfig({
 					id: `provider-${Date.now()}`,
-					provider: req.provider,
+					provider: req.provider ?? "",
 					display_name: req.display_name ?? "",
 					has_api_key: (req.api_key ?? "").trim().length > 0,
 					central_api_key_enabled: req.central_api_key_enabled ?? true,
@@ -359,11 +454,15 @@ export const CreateAndUpdateProvider: Story = {
 					base_url: req.base_url ?? "",
 					source: "database",
 				});
+				await args.onCreateProvider(req);
 				setProviderConfigsData((current) => [
-					...(current ?? []).filter((p) => p.provider !== req.provider),
+					...(current ?? []).filter(
+						(p) =>
+							!(p.id === nilProviderConfigID && p.provider === req.provider),
+					),
 					created,
 				]);
-				return result;
+				return created;
 			};
 
 		const handleUpdateProvider: ChatModelAdminPanelStoryProps["onUpdateProvider"] =
@@ -446,16 +545,6 @@ export const CreateAndUpdateProvider: Story = {
 
 		await userEvent.click(await body.findByRole("button", { name: /OpenAI/i }));
 
-		await expect(
-			await body.findByRole("switch", { name: "Central API key" }),
-		).toBeChecked();
-		expect(
-			await body.findByRole("switch", { name: "Allow user API keys" }),
-		).not.toBeChecked();
-		expect(
-			body.queryByRole("switch", { name: "Use central key as fallback" }),
-		).not.toBeInTheDocument();
-
 		await userEvent.type(
 			await body.findByLabelText(/^API Key$/i),
 			"sk-provider-key",
@@ -479,9 +568,6 @@ export const CreateAndUpdateProvider: Story = {
 				provider: "openai",
 				api_key: "sk-provider-key",
 				base_url: "https://proxy.example.com/v1",
-				central_api_key_enabled: true,
-				allow_user_api_key: false,
-				allow_central_api_key_fallback: false,
 			}),
 		);
 
@@ -490,13 +576,6 @@ export const CreateAndUpdateProvider: Story = {
 				body.getByRole("button", { name: "Save changes" }),
 			).toBeInTheDocument();
 		});
-
-		await userEvent.click(
-			await body.findByRole("switch", { name: "Allow user API keys" }),
-		);
-		await userEvent.click(
-			await body.findByRole("switch", { name: "Use central key as fallback" }),
-		);
 
 		const apiKeyInput = body.getByLabelText(/^API Key$/i);
 		await userEvent.clear(apiKeyInput);
@@ -514,180 +593,6 @@ export const CreateAndUpdateProvider: Story = {
 			expect.objectContaining({
 				api_key: "sk-updated-provider-key",
 				base_url: "https://internal-proxy.example.com/v2",
-				allow_user_api_key: true,
-				allow_central_api_key_fallback: true,
-			}),
-		);
-	},
-};
-
-export const ProviderWithUserKeysEnabled: Story = {
-	args: {
-		section: "providers" as ChatModelAdminSection,
-		providerConfigsData: [
-			createProviderConfig({
-				id: "provider-openai-user-keys",
-				provider: "openai",
-				display_name: "OpenAI",
-				has_api_key: true,
-				central_api_key_enabled: true,
-				allow_user_api_key: true,
-				allow_central_api_key_fallback: false,
-			}),
-		],
-		modelCatalogData: { providers: [] },
-	},
-	beforeEach: () => {
-		setupChatSpies({
-			providerConfigs: [
-				createProviderConfig({
-					id: "provider-openai-user-keys",
-					provider: "openai",
-					display_name: "OpenAI",
-					has_api_key: true,
-					central_api_key_enabled: true,
-					allow_user_api_key: true,
-					allow_central_api_key_fallback: false,
-				}),
-			],
-			modelConfigs: [],
-			modelCatalog: { providers: [] },
-		});
-	},
-	play: async ({ canvasElement }) => {
-		const body = within(canvasElement.ownerDocument.body);
-		await expect(
-			await body.findByText("User keys enabled"),
-		).toBeInTheDocument();
-		await userEvent.click(body.getByRole("button", { name: /OpenAI/i }));
-		await expect(
-			await body.findByRole("switch", { name: "Allow user API keys" }),
-		).toBeChecked();
-		await expect(
-			await body.findByRole("switch", {
-				name: "Use central key as fallback",
-			}),
-		).not.toBeChecked();
-	},
-};
-
-export const ProviderWithCentralFallback: Story = {
-	args: {
-		section: "providers" as ChatModelAdminSection,
-		providerConfigsData: [
-			createProviderConfig({
-				id: "provider-openrouter-fallback",
-				provider: "openrouter",
-				display_name: "OpenRouter",
-				has_api_key: true,
-				central_api_key_enabled: true,
-				allow_user_api_key: true,
-				allow_central_api_key_fallback: true,
-			}),
-		],
-		modelCatalogData: { providers: [] },
-	},
-	beforeEach: () => {
-		setupChatSpies({
-			providerConfigs: [
-				createProviderConfig({
-					id: "provider-openrouter-fallback",
-					provider: "openrouter",
-					display_name: "OpenRouter",
-					has_api_key: true,
-					central_api_key_enabled: true,
-					allow_user_api_key: true,
-					allow_central_api_key_fallback: true,
-				}),
-			],
-			modelConfigs: [],
-			modelCatalog: { providers: [] },
-		});
-	},
-	play: async ({ canvasElement }) => {
-		const body = within(canvasElement.ownerDocument.body);
-		await userEvent.click(
-			await body.findByRole("button", { name: /OpenRouter/i }),
-		);
-		await expect(
-			await body.findByRole("switch", {
-				name: "Use central key as fallback",
-			}),
-		).toBeChecked();
-	},
-};
-
-export const ProviderWithUserKeysOnly: Story = {
-	args: {
-		section: "providers" as ChatModelAdminSection,
-		providerConfigsData: [
-			createProviderConfig({
-				id: "provider-google-user-only",
-				provider: "google",
-				display_name: "Google",
-				has_api_key: false,
-				central_api_key_enabled: false,
-				allow_user_api_key: true,
-				allow_central_api_key_fallback: false,
-			}),
-		],
-		modelCatalogData: { providers: [] },
-	},
-	beforeEach: () => {
-		setupChatSpies({
-			providerConfigs: [
-				createProviderConfig({
-					id: "provider-google-user-only",
-					provider: "google",
-					display_name: "Google",
-					has_api_key: false,
-					central_api_key_enabled: false,
-					allow_user_api_key: true,
-					allow_central_api_key_fallback: false,
-				}),
-			],
-			modelConfigs: [],
-			modelCatalog: { providers: [] },
-		});
-	},
-	play: async ({ canvasElement, args }) => {
-		const body = within(canvasElement.ownerDocument.body);
-		await userEvent.click(await body.findByRole("button", { name: /Google/i }));
-		await expect(
-			await body.findByRole("switch", { name: "Central API key" }),
-		).not.toBeChecked();
-		await expect(
-			await body.findByRole("switch", { name: "Allow user API keys" }),
-		).toBeChecked();
-		expect(body.queryByLabelText(/^API Key$/i)).not.toBeInTheDocument();
-		expect(
-			body.queryByRole("switch", { name: "Use central key as fallback" }),
-		).not.toBeInTheDocument();
-
-		const saveButton = body.getByRole("button", { name: "Save changes" });
-		await userEvent.click(
-			body.getByRole("switch", { name: "Central API key" }),
-		);
-		await expect(await body.findByLabelText(/^API Key$/i)).toBeRequired();
-		expect(saveButton).toBeDisabled();
-
-		await userEvent.type(
-			body.getByLabelText(/^API Key$/i),
-			"sk-google-central-key",
-		);
-		await waitFor(() => {
-			expect(saveButton).toBeEnabled();
-		});
-		await userEvent.click(saveButton);
-
-		await waitFor(() => {
-			expect(args.onUpdateProvider).toHaveBeenCalledTimes(1);
-		});
-		expect(args.onUpdateProvider).toHaveBeenCalledWith(
-			"provider-google-user-only",
-			expect.objectContaining({
-				api_key: "sk-google-central-key",
-				central_api_key_enabled: true,
 			}),
 		);
 	},
@@ -777,51 +682,6 @@ export const ModelFormUserKeyOnlyProvider: Story = {
 	},
 };
 
-export const ProviderInvalidCredentialState: Story = {
-	args: {
-		section: "providers" as ChatModelAdminSection,
-		providerConfigsData: [
-			createProviderConfig({
-				id: "provider-bedrock-invalid",
-				provider: "bedrock",
-				display_name: "Bedrock",
-				has_api_key: false,
-				central_api_key_enabled: false,
-				allow_user_api_key: false,
-				allow_central_api_key_fallback: false,
-			}),
-		],
-		modelCatalogData: { providers: [] },
-	},
-	beforeEach: () => {
-		setupChatSpies({
-			providerConfigs: [
-				createProviderConfig({
-					id: "provider-bedrock-invalid",
-					provider: "bedrock",
-					display_name: "Bedrock",
-					has_api_key: false,
-					central_api_key_enabled: false,
-					allow_user_api_key: false,
-					allow_central_api_key_fallback: false,
-				}),
-			],
-			modelConfigs: [],
-			modelCatalog: { providers: [] },
-		});
-	},
-	play: async ({ canvasElement }) => {
-		const body = within(canvasElement.ownerDocument.body);
-		await userEvent.click(
-			await body.findByRole("button", { name: /Bedrock/i }),
-		);
-		await expect(
-			body.findByText("At least one credential source must be enabled"),
-		).resolves.toBeInTheDocument();
-		expect(body.getByRole("button", { name: "Save changes" })).toBeDisabled();
-	},
-};
-
 export const ProviderFormBedrockAmbientCredentials: Story = {
 	args: {
 		section: "providers" as ChatModelAdminSection,
@@ -875,9 +735,6 @@ export const ProviderFormBedrockAmbientCredentials: Story = {
 		>;
 		expect(createRequest).toMatchObject({
 			provider: "bedrock",
-			central_api_key_enabled: true,
-			allow_user_api_key: false,
-			allow_central_api_key_fallback: false,
 		});
 		expect(createRequest).not.toHaveProperty("api_key");
 	},

@@ -6,6 +6,15 @@ FROM
 WHERE
     id = @id::uuid AND deleted = FALSE;
 
+-- name: GetAIProviderByIDForReferenceLock :one
+SELECT
+    *
+FROM
+    ai_providers
+WHERE
+    id = @id::uuid AND deleted = FALSE
+FOR SHARE;
+
 -- name: GetAIProviderByName :one
 SELECT
     *

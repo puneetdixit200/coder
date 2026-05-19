@@ -264,11 +264,7 @@ type AIProviderKeyMutation struct {
 // should reject empty patches with IsEmpty before invoking Validate.
 func (req UpdateAIProviderRequest) Validate() []ValidationError {
 	var validations []ValidationError
-	switch {
-	case req.BaseURL == nil:
-	case *req.BaseURL == "":
-		validations = append(validations, ValidationError{Field: "base_url", Detail: "base_url cannot be empty"})
-	default:
+	if req.BaseURL != nil && *req.BaseURL != "" {
 		validations = append(validations, validateAIProviderBaseURL(*req.BaseURL)...)
 	}
 	if req.APIKeys != nil {

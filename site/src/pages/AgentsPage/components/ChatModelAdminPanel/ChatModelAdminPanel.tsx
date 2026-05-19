@@ -13,6 +13,7 @@ import { ProvidersSection } from "./ProvidersSection";
 // ── Exported types ─────────────────────────────────────────────
 
 export type ProviderState = {
+	key: string;
 	provider: string;
 	label: string;
 	providerConfig: TypesGen.ChatProviderConfig | undefined;
@@ -21,6 +22,7 @@ export type ProviderState = {
 	hasManagedAPIKey: boolean;
 	hasCatalogAPIKey: boolean;
 	hasEffectiveAPIKey: boolean;
+	allowUserAPIKey: boolean;
 	isEnvPreset: boolean;
 	baseURL: string;
 };
@@ -81,6 +83,21 @@ const getProviderBaseURL = (
 	return readOptionalString(providerConfig?.base_url) ?? "";
 };
 
+const providerConfigStateKey = (
+	providerConfig: TypesGen.ChatProviderConfig,
+): string => {
+	const providerID = readOptionalString(providerConfig.id);
+	if (providerID && providerID !== nilUUID) {
+		return providerID;
+	}
+	return normalizeProvider(providerConfig.provider);
+};
+
+type ProviderEntry = {
+	key: string;
+	provider: string;
+};
+
 // ── Hook: compute provider states from query data ──────────────
 
 const useProviderStates = (
@@ -88,55 +105,80 @@ const useProviderStates = (
 	providerConfigsData: TypesGen.ChatProviderConfig[] | null | undefined,
 	catalogData: TypesGen.ChatModelsResponse | null | undefined,
 ): readonly ProviderState[] => {
-	const orderedProviders: string[] = [];
-	const seenProviders = new Set<string>();
-	const includeProvider = (providerValue: string) => {
-		const normalized = normalizeProvider(providerValue);
-		if (!normalized || seenProviders.has(normalized)) return;
-		seenProviders.add(normalized);
-		orderedProviders.push(normalized);
+	const orderedEntries: ProviderEntry[] = [];
+	const seenEntries = new Set<string>();
+	const includeEntry = (keyValue: string, providerValue: string) => {
+		const key = readOptionalString(keyValue);
+		const provider = normalizeProvider(providerValue);
+		if (!key || !provider || seenEntries.has(key)) return;
+		seenEntries.add(key);
+		orderedEntries.push({ key, provider });
 	};
 
 	const catalogProviders = getCatalogProviders(catalogData);
 	const catalogProvidersByProvider = new Map<string, CatalogProvider>();
 	for (const cp of catalogProviders) {
-		const normalized = normalizeProvider(cp.provider);
-		if (!normalized) continue;
-		includeProvider(normalized);
-		catalogProvidersByProvider.set(normalized, cp);
+		const provider = normalizeProvider(cp.provider);
+		if (!provider) continue;
+		catalogProvidersByProvider.set(provider, cp);
 	}
 
+	const providerConfigKeysByProvider = new Map<string, string[]>();
+	const providerTypesWithConfigs = new Set<string>();
 	for (const pc of providerConfigsData ?? []) {
-		includeProvider(pc.provider);
+		const provider = normalizeProvider(pc.provider);
+		if (!provider) continue;
+		const key = providerConfigStateKey(pc);
+		providerTypesWithConfigs.add(provider);
+		providerConfigKeysByProvider.set(provider, [
+			...(providerConfigKeysByProvider.get(provider) ?? []),
+			key,
+		]);
+		includeEntry(key, provider);
+	}
+	const modelStateKey = (modelConfig: TypesGen.ChatModelConfig): string => {
+		const aiProviderID = readOptionalString(modelConfig.ai_provider_id);
+		if (aiProviderID) {
+			return aiProviderID;
+		}
+		const provider = normalizeProvider(modelConfig.provider);
+		const providerConfigKeys = providerConfigKeysByProvider.get(provider) ?? [];
+		if (providerConfigKeys.length === 1) {
+			return providerConfigKeys[0];
+		}
+		return providerConfigKeys.length === 0 ? provider : "";
+	};
+
+	for (const cp of catalogProviders) {
+		const provider = normalizeProvider(cp.provider);
+		if (!provider || providerTypesWithConfigs.has(provider)) continue;
+		includeEntry(provider, provider);
 	}
 	for (const mc of modelConfigs) {
-		includeProvider(mc.provider);
+		includeEntry(modelStateKey(mc), mc.provider);
 	}
 
-	const providerConfigsByProvider = new Map<
-		string,
-		TypesGen.ChatProviderConfig
-	>();
+	const providerConfigsByKey = new Map<string, TypesGen.ChatProviderConfig>();
 	for (const pc of providerConfigsData ?? []) {
-		const normalized = normalizeProvider(pc.provider);
-		if (!normalized) continue;
-		providerConfigsByProvider.set(normalized, pc);
+		const key = providerConfigStateKey(pc);
+		if (!key) continue;
+		providerConfigsByKey.set(key, pc);
 	}
 
-	const modelConfigsByProvider = new Map<string, TypesGen.ChatModelConfig[]>();
+	const modelConfigsByKey = new Map<string, TypesGen.ChatModelConfig[]>();
 	for (const mc of modelConfigs) {
-		const normalized = normalizeProvider(mc.provider);
-		if (!normalized) continue;
-		const existing = modelConfigsByProvider.get(normalized);
+		const key = modelStateKey(mc);
+		if (!key) continue;
+		const existing = modelConfigsByKey.get(key);
 		if (existing) {
 			existing.push(mc);
 		} else {
-			modelConfigsByProvider.set(normalized, [mc]);
+			modelConfigsByKey.set(key, [mc]);
 		}
 	}
 
-	return orderedProviders.map((provider) => {
-		const providerConfigEntry = providerConfigsByProvider.get(provider);
+	return orderedEntries.map(({ key, provider }) => {
+		const providerConfigEntry = providerConfigsByKey.get(key);
 		const providerConfigSource = getProviderConfigSource(providerConfigEntry);
 		const providerConfig = isDatabaseProviderConfig(
 			providerConfigEntry,
@@ -159,7 +201,7 @@ const useProviderStates = (
 		const hasBedrockAmbientCredentials =
 			provider === "bedrock" &&
 			providerConfig?.central_api_key_enabled === true;
-		const modelConfigsForProvider = modelConfigsByProvider.get(provider) ?? [];
+		const modelConfigsForProvider = modelConfigsByKey.get(key) ?? [];
 		const isCatalogEnvPreset =
 			!providerConfig &&
 			envPresetProviders.has(provider) &&
@@ -168,6 +210,7 @@ const useProviderStates = (
 			providerConfigSource === "env_preset" || isCatalogEnvPreset;
 
 		return {
+			key,
 			provider,
 			label,
 			providerConfig,
@@ -178,6 +221,7 @@ const useProviderStates = (
 			hasEffectiveAPIKey: providerConfigEntry
 				? hasProviderEntryAPIKey || hasBedrockAmbientCredentials
 				: hasManagedAPIKey || hasCatalogAPIKey,
+			allowUserAPIKey: providerConfigEntry?.allow_user_api_key ?? true,
 			isEnvPreset,
 			baseURL: getProviderBaseURL(providerConfigEntry),
 		};

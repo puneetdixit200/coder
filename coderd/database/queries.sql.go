@@ -146,6 +146,47 @@ func (q *sqlQuerier) GetAIProviderKeyByID(ctx context.Context, id uuid.UUID) (AI
 	return i, err
 }
 
+const getAIProviderKeyPresence = `-- name: GetAIProviderKeyPresence :many
+SELECT DISTINCT
+    provider_id
+FROM
+    ai_provider_keys
+WHERE
+    $1::boolean
+    AND provider_id = ANY($2::uuid[])
+ORDER BY
+    provider_id ASC
+`
+
+type GetAIProviderKeyPresenceParams struct {
+	Enabled     bool        `db:"enabled" json:"enabled"`
+	ProviderIds []uuid.UUID `db:"provider_ids" json:"provider_ids"`
+}
+
+// Returns the provider IDs that have at least one provider-scoped key.
+func (q *sqlQuerier) GetAIProviderKeyPresence(ctx context.Context, arg GetAIProviderKeyPresenceParams) ([]uuid.UUID, error) {
+	rows, err := q.db.QueryContext(ctx, getAIProviderKeyPresence, arg.Enabled, pq.Array(arg.ProviderIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var provider_id uuid.UUID
+		if err := rows.Scan(&provider_id); err != nil {
+			return nil, err
+		}
+		items = append(items, provider_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAIProviderKeys = `-- name: GetAIProviderKeys :many
 SELECT
     ai_provider_keys.id, ai_provider_keys.provider_id, ai_provider_keys.api_key, ai_provider_keys.api_key_key_id, ai_provider_keys.created_at, ai_provider_keys.updated_at
@@ -354,6 +395,35 @@ WHERE
 
 func (q *sqlQuerier) GetAIProviderByID(ctx context.Context, id uuid.UUID) (AIProvider, error) {
 	row := q.db.QueryRowContext(ctx, getAIProviderByID, id)
+	var i AIProvider
+	err := row.Scan(
+		&i.ID,
+		&i.Type,
+		&i.Name,
+		&i.DisplayName,
+		&i.Enabled,
+		&i.Deleted,
+		&i.BaseUrl,
+		&i.Settings,
+		&i.SettingsKeyID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getAIProviderByIDForReferenceLock = `-- name: GetAIProviderByIDForReferenceLock :one
+SELECT
+    id, type, name, display_name, enabled, deleted, base_url, settings, settings_key_id, created_at, updated_at
+FROM
+    ai_providers
+WHERE
+    id = $1::uuid AND deleted = FALSE
+FOR SHARE
+`
+
+func (q *sqlQuerier) GetAIProviderByIDForReferenceLock(ctx context.Context, id uuid.UUID) (AIProvider, error) {
+	row := q.db.QueryRowContext(ctx, getAIProviderByIDForReferenceLock, id)
 	var i AIProvider
 	err := row.Scan(
 		&i.ID,
@@ -5201,7 +5271,8 @@ INSERT INTO chat_model_configs (
     is_default,
     context_limit,
     compression_threshold,
-    options
+    options,
+    ai_provider_id
 ) VALUES (
     $1::text,
     $2::text,
@@ -5212,7 +5283,8 @@ INSERT INTO chat_model_configs (
     $7::boolean,
     $8::bigint,
     $9::integer,
-    $10::jsonb
+    $10::jsonb,
+    $11::uuid
 )
 RETURNING
     id, provider, model, display_name, created_by, updated_by, enabled, is_default, deleted, deleted_at, created_at, updated_at, context_limit, compression_threshold, options, ai_provider_id
@@ -5229,6 +5301,7 @@ type InsertChatModelConfigParams struct {
 	ContextLimit         int64           `db:"context_limit" json:"context_limit"`
 	CompressionThreshold int32           `db:"compression_threshold" json:"compression_threshold"`
 	Options              json.RawMessage `db:"options" json:"options"`
+	AIProviderID         uuid.NullUUID   `db:"ai_provider_id" json:"ai_provider_id"`
 }
 
 func (q *sqlQuerier) InsertChatModelConfig(ctx context.Context, arg InsertChatModelConfigParams) (ChatModelConfig, error) {
@@ -5243,6 +5316,7 @@ func (q *sqlQuerier) InsertChatModelConfig(ctx context.Context, arg InsertChatMo
 		arg.ContextLimit,
 		arg.CompressionThreshold,
 		arg.Options,
+		arg.AIProviderID,
 	)
 	var i ChatModelConfig
 	err := row.Scan(
@@ -5295,9 +5369,10 @@ SET
     context_limit = $7::bigint,
     compression_threshold = $8::integer,
     options = $9::jsonb,
+    ai_provider_id = $10::uuid,
     updated_at = NOW()
 WHERE
-    id = $10::uuid
+    id = $11::uuid
     AND deleted = FALSE
 RETURNING
     id, provider, model, display_name, created_by, updated_by, enabled, is_default, deleted, deleted_at, created_at, updated_at, context_limit, compression_threshold, options, ai_provider_id
@@ -5313,6 +5388,7 @@ type UpdateChatModelConfigParams struct {
 	ContextLimit         int64           `db:"context_limit" json:"context_limit"`
 	CompressionThreshold int32           `db:"compression_threshold" json:"compression_threshold"`
 	Options              json.RawMessage `db:"options" json:"options"`
+	AIProviderID         uuid.NullUUID   `db:"ai_provider_id" json:"ai_provider_id"`
 	ID                   uuid.UUID       `db:"id" json:"id"`
 }
 
@@ -5327,6 +5403,7 @@ func (q *sqlQuerier) UpdateChatModelConfig(ctx context.Context, arg UpdateChatMo
 		arg.ContextLimit,
 		arg.CompressionThreshold,
 		arg.Options,
+		arg.AIProviderID,
 		arg.ID,
 	)
 	var i ChatModelConfig

@@ -444,6 +444,19 @@ export interface AIProviderSettings {}
  */
 export const AIProviderSettingsTypeBedrock = "bedrock";
 
+// From codersdk/chats.go
+/**
+ * AIProviderSummary is provider metadata embedded in other API responses.
+ */
+export interface AIProviderSummary {
+	readonly id: string;
+	readonly type: AIProviderType;
+	readonly name: string;
+	readonly display_name: string;
+	readonly enabled: boolean;
+	readonly deleted: boolean;
+}
+
 // From codersdk/aiproviders.go
 export type AIProviderType =
 	| "anthropic"
@@ -2277,6 +2290,7 @@ export interface ChatModelCallConfig {
 export interface ChatModelConfig {
 	readonly id: string;
 	readonly provider: string;
+	readonly ai_provider_id?: string;
 	readonly model: string;
 	readonly display_name: string;
 	readonly enabled: boolean;
@@ -3242,7 +3256,8 @@ export interface CreateChatMessageResponse {
  * CreateChatModelConfigRequest creates a chat model config.
  */
 export interface CreateChatModelConfigRequest {
-	readonly provider: string;
+	readonly provider?: string;
+	readonly ai_provider_id?: string;
 	readonly model: string;
 	readonly display_name?: string;
 	readonly enabled?: boolean;
@@ -3571,6 +3586,15 @@ export interface CreateTokenRequest {
 	readonly scopes?: readonly APIKeyScope[];
 	readonly token_name: string;
 	readonly allow_list?: readonly APIAllowListTarget[];
+}
+
+// From codersdk/chats.go
+/**
+ * CreateUserAIProviderKeyRequest creates or replaces a user's API key
+ * for an AI provider.
+ */
+export interface CreateUserAIProviderKeyRequest {
+	readonly api_key: string;
 }
 
 // From codersdk/chats.go
@@ -8456,6 +8480,7 @@ export interface UpdateChatDesktopEnabledRequest {
  */
 export interface UpdateChatModelConfigRequest {
 	readonly provider?: string;
+	readonly ai_provider_id?: string;
 	readonly model?: string;
 	readonly display_name?: string;
 	readonly enabled?: boolean;
@@ -9077,6 +9102,18 @@ export interface User extends ReducedUser {
 	readonly has_ai_seat: boolean;
 }
 
+// From codersdk/chats.go
+/**
+ * UserAIProviderKeyConfig is a provider summary from the current user's
+ * perspective. It reports key presence but never returns key material.
+ */
+export interface UserAIProviderKeyConfig {
+	readonly provider: AIProviderSummary;
+	readonly has_user_api_key: boolean;
+	readonly has_provider_api_key: boolean;
+	readonly byok_enabled: boolean;
+}
+
 // From codersdk/insights.go
 /**
  * UserActivity shows the session time for a user.
@@ -9203,6 +9240,7 @@ export interface UserChatProviderConfig {
 	readonly display_name: string;
 	readonly has_user_api_key: boolean;
 	readonly has_central_api_key_fallback: boolean;
+	readonly byok_enabled: boolean;
 }
 
 // From codersdk/insights.go

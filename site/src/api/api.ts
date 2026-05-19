@@ -408,9 +408,11 @@ export type DeploymentConfig = Readonly<{
 }>;
 
 const chatProviderConfigsPath = "/api/experimental/chats/providers";
+const aiProviderConfigsPath = "/api/v2/ai/providers";
 const chatModelConfigsPath = "/api/experimental/chats/model-configs";
 const userChatProviderConfigsPath =
 	"/api/experimental/chats/user-provider-configs";
+const userAIProviderKeysPath = "/api/experimental/chats/user-ai-provider-keys";
 const mcpServerConfigsPath = "/api/experimental/mcp/servers";
 
 type ChatCostDateParams = {
@@ -3293,6 +3295,62 @@ class ExperimentalApiMethods {
 			"/api/experimental/chats/models",
 		);
 		return response.data;
+	};
+
+	listAIProviders = async (): Promise<TypesGen.AIProvider[]> => {
+		const response = await this.axios.get<TypesGen.AIProvider[]>(
+			aiProviderConfigsPath,
+		);
+		return response.data;
+	};
+
+	createAIProvider = async (
+		req: TypesGen.CreateAIProviderRequest,
+	): Promise<TypesGen.AIProvider> => {
+		const response = await this.axios.post<TypesGen.AIProvider>(
+			aiProviderConfigsPath,
+			req,
+		);
+		return response.data;
+	};
+
+	updateAIProvider = async (
+		providerId: string,
+		req: TypesGen.UpdateAIProviderRequest,
+	): Promise<TypesGen.AIProvider> => {
+		const response = await this.axios.patch<TypesGen.AIProvider>(
+			`${aiProviderConfigsPath}/${providerId}`,
+			req,
+		);
+		return response.data;
+	};
+
+	deleteAIProvider = async (providerId: string): Promise<void> => {
+		await this.axios.delete(`${aiProviderConfigsPath}/${providerId}`);
+	};
+
+	getUserAIProviderKeyConfigs = async (): Promise<
+		TypesGen.UserAIProviderKeyConfig[]
+	> => {
+		const response = await this.axios.get<TypesGen.UserAIProviderKeyConfig[]>(
+			userAIProviderKeysPath,
+		);
+		return response.data;
+	};
+
+	upsertUserAIProviderKey = async (
+		providerId: string,
+		req: TypesGen.CreateUserAIProviderKeyRequest,
+	): Promise<TypesGen.UserAIProviderKeyConfig> => {
+		const response = await this.axios.put<TypesGen.UserAIProviderKeyConfig>(
+			`${userAIProviderKeysPath}/${providerId}`,
+			req,
+		);
+		return response.data;
+	};
+
+	deleteUserAIProviderKey = async (providerId: string): Promise<void> => {
+		await this.axios.delete(`${userAIProviderKeysPath}/${providerId}`);
 	};
 
 	getChatSystemPrompt =

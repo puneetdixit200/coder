@@ -24,6 +24,14 @@ type ProviderStatus = {
 const getProviderStatus = (
 	provider: UserChatProviderConfig,
 ): ProviderStatus => {
+	if (!provider.byok_enabled) {
+		return {
+			label: "User keys disabled",
+			variant: "default",
+			note: "Personal API keys are disabled by your admin.",
+		};
+	}
+
 	if (provider.has_user_api_key) {
 		return {
 			label: "Key saved",
@@ -55,11 +63,13 @@ interface ProviderKeyPanelProps {
 	isRemoving: boolean;
 	onSave: (providerConfigId: string, apiKey: string) => void;
 	onRemove: (providerConfigId: string) => void;
+	hasAmbiguousProviderType: boolean;
 }
 
 const ProviderKeyPanel: FC<ProviderKeyPanelProps> = ({
 	provider,
 	models,
+	hasAmbiguousProviderType,
 	isModelsLoading,
 	areModelsUnavailable,
 	isSaving,
@@ -76,15 +86,23 @@ const ProviderKeyPanel: FC<ProviderKeyPanelProps> = ({
 
 	const status = getProviderStatus(provider);
 	const enabledModels = models.filter((model) => {
-		return model.enabled && model.provider === provider.provider;
+		return (
+			model.enabled &&
+			(model.ai_provider_id === provider.provider_id ||
+				(!model.ai_provider_id &&
+					!hasAmbiguousProviderType &&
+					model.provider === provider.provider))
+		);
 	});
 	const trimmedApiKey = apiKey.trim();
 	const saveDisabled =
+		!provider.byok_enabled ||
 		trimmedApiKey.length === 0 ||
 		apiKey === API_KEY_PLACEHOLDER ||
 		isSaving ||
 		isRemoving;
-	const inputDisabled = isSaving || isRemoving;
+	const inputDisabled = !provider.byok_enabled || isSaving || isRemoving;
+	const removeDisabled = isSaving || isRemoving;
 	const providerName = provider.display_name || provider.provider;
 
 	const handleApiKeyFocus = () => {
@@ -165,7 +183,7 @@ const ProviderKeyPanel: FC<ProviderKeyPanelProps> = ({
 								variant="outline"
 								size="sm"
 								onClick={() => setIsDeleteDialogOpen(true)}
-								disabled={inputDisabled}
+								disabled={removeDisabled}
 							>
 								Remove
 							</Button>
@@ -245,6 +263,14 @@ export const AgentSettingsAPIKeysPageView: FC<
 	onSave,
 	onRemove,
 }) => {
+	const providerTypeCounts = new Map<string, number>();
+	for (const item of providerItems) {
+		providerTypeCounts.set(
+			item.provider.provider,
+			(providerTypeCounts.get(item.provider.provider) ?? 0) + 1,
+		);
+	}
+
 	return (
 		<div>
 			<section className="flex flex-col gap-8">
@@ -275,6 +301,9 @@ export const AgentSettingsAPIKeysPageView: FC<
 									isRemoving={item.isRemoving}
 									onSave={onSave}
 									onRemove={onRemove}
+									hasAmbiguousProviderType={
+										(providerTypeCounts.get(item.provider.provider) ?? 0) > 1
+									}
 								/>
 							))}
 						</div>

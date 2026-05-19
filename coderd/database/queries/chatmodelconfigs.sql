@@ -72,7 +72,8 @@ INSERT INTO chat_model_configs (
     is_default,
     context_limit,
     compression_threshold,
-    options
+    options,
+    ai_provider_id
 ) VALUES (
     @provider::text,
     @model::text,
@@ -83,7 +84,8 @@ INSERT INTO chat_model_configs (
     @is_default::boolean,
     @context_limit::bigint,
     @compression_threshold::integer,
-    @options::jsonb
+    @options::jsonb,
+    sqlc.narg('ai_provider_id')::uuid
 )
 RETURNING
     *;
@@ -101,6 +103,7 @@ SET
     context_limit = @context_limit::bigint,
     compression_threshold = @compression_threshold::integer,
     options = @options::jsonb,
+    ai_provider_id = sqlc.narg('ai_provider_id')::uuid,
     updated_at = NOW()
 WHERE
     id = @id::uuid

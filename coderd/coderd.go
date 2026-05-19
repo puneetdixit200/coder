@@ -1298,6 +1298,13 @@ func New(options *Options) *API {
 					r.Delete("/", api.deleteUserChatProviderKey)
 				})
 			})
+			r.Route("/user-ai-provider-keys", func(r chi.Router) {
+				r.Get("/", api.listUserAIProviderKeyConfigs)
+				r.Route("/{aiProvider}", func(r chi.Router) {
+					r.Put("/", api.upsertUserAIProviderKey)
+					r.Delete("/", api.deleteUserAIProviderKey)
+				})
+			})
 			r.Route("/{chat}", func(r chi.Router) {
 				r.Use(httpmw.ExtractChatParam(options.Database))
 				r.Route("/acl", func(r chi.Router) {

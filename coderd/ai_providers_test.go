@@ -155,6 +155,36 @@ func TestAIProvidersCRUD(t *testing.T) {
 		require.Equal(t, "no-display", created.DisplayName)
 	})
 
+	t.Run("OptionalBaseURL", func(t *testing.T) {
+		t.Parallel()
+		client := coderdtest.New(t, nil)
+		_ = coderdtest.CreateFirstUser(t, client)
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		//nolint:gocritic // Owner role is the audience for this endpoint.
+		created, err := client.CreateAIProvider(ctx, codersdk.CreateAIProviderRequest{
+			Type:    codersdk.AIProviderTypeOpenAI,
+			Name:    "optional-base-url",
+			Enabled: true,
+		})
+		require.NoError(t, err)
+		require.Empty(t, created.BaseURL)
+
+		baseURL := "https://api.openai.com/v1"
+		updated, err := client.UpdateAIProvider(ctx, created.Name, codersdk.UpdateAIProviderRequest{
+			BaseURL: &baseURL,
+		})
+		require.NoError(t, err)
+		require.Equal(t, baseURL, updated.BaseURL)
+
+		baseURL = ""
+		updated, err = client.UpdateAIProvider(ctx, created.Name, codersdk.UpdateAIProviderRequest{
+			BaseURL: &baseURL,
+		})
+		require.NoError(t, err)
+		require.Empty(t, updated.BaseURL)
+	})
+
 	t.Run("DuplicateNameConflict", func(t *testing.T) {
 		t.Parallel()
 		client := coderdtest.New(t, nil)

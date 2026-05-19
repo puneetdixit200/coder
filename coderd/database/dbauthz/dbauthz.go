@@ -2548,6 +2548,13 @@ func (q *querier) GetAIProviderByID(ctx context.Context, id uuid.UUID) (database
 	return q.db.GetAIProviderByID(ctx, id)
 }
 
+func (q *querier) GetAIProviderByIDForReferenceLock(ctx context.Context, id uuid.UUID) (database.AIProvider, error) {
+	if err := q.authorizeContext(ctx, policy.ActionRead, rbac.ResourceAIProvider); err != nil {
+		return database.AIProvider{}, err
+	}
+	return q.db.GetAIProviderByIDForReferenceLock(ctx, id)
+}
+
 func (q *querier) GetAIProviderByName(ctx context.Context, name string) (database.AIProvider, error) {
 	if err := q.authorizeContext(ctx, policy.ActionRead, rbac.ResourceAIProvider); err != nil {
 		return database.AIProvider{}, err
@@ -2560,6 +2567,13 @@ func (q *querier) GetAIProviderKeyByID(ctx context.Context, id uuid.UUID) (datab
 		return database.AIProviderKey{}, err
 	}
 	return q.db.GetAIProviderKeyByID(ctx, id)
+}
+
+func (q *querier) GetAIProviderKeyPresence(ctx context.Context, arg database.GetAIProviderKeyPresenceParams) ([]uuid.UUID, error) {
+	if err := q.authorizeContext(ctx, policy.ActionRead, rbac.ResourceAIProvider); err != nil {
+		return nil, err
+	}
+	return q.db.GetAIProviderKeyPresence(ctx, arg)
 }
 
 func (q *querier) GetAIProviderKeys(ctx context.Context, includeDeleted bool) ([]database.AIProviderKey, error) {

@@ -1589,10 +1589,29 @@ export const chatModels = () => ({
 
 const chatProviderConfigsKey = ["chat-provider-configs"] as const;
 
+const toChatProviderConfig = (
+	provider: TypesGen.AIProvider,
+): TypesGen.ChatProviderConfig => ({
+	id: provider.id,
+	provider: provider.type,
+	display_name: provider.display_name || provider.type,
+	enabled: provider.enabled,
+	has_api_key: provider.api_keys.length > 0,
+	central_api_key_enabled: true,
+	allow_user_api_key: true,
+	allow_central_api_key_fallback: true,
+	base_url: provider.base_url,
+	source: "database",
+	created_at: provider.created_at,
+	updated_at: provider.updated_at,
+});
+
 export const chatProviderConfigs = () => ({
 	queryKey: chatProviderConfigsKey,
-	queryFn: (): Promise<TypesGen.ChatProviderConfig[]> =>
-		API.experimental.getChatProviderConfigs(),
+	queryFn: async (): Promise<TypesGen.ChatProviderConfig[]> => {
+		const providers = await API.experimental.listAIProviders();
+		return providers.map(toChatProviderConfig);
+	},
 });
 
 const chatModelConfigsKey = ["chat-model-configs"] as const;
@@ -1609,8 +1628,17 @@ export const userChatProviderConfigsKey = [
 
 export const userChatProviderConfigs = () => ({
 	queryKey: userChatProviderConfigsKey,
-	queryFn: (): Promise<TypesGen.UserChatProviderConfig[]> =>
-		API.experimental.getUserChatProviderConfigs(),
+	queryFn: async (): Promise<TypesGen.UserChatProviderConfig[]> => {
+		const configs = await API.experimental.getUserAIProviderKeyConfigs();
+		return configs.map((config) => ({
+			provider_id: config.provider.id,
+			provider: config.provider.type,
+			display_name: config.provider.display_name || config.provider.type,
+			has_user_api_key: config.has_user_api_key,
+			byok_enabled: config.byok_enabled,
+			has_central_api_key_fallback: config.has_provider_api_key,
+		}));
+	},
 });
 
 type UpsertUserChatProviderKeyArgs = {
@@ -1620,7 +1648,7 @@ type UpsertUserChatProviderKeyArgs = {
 
 export const upsertUserChatProviderKey = (queryClient: QueryClient) => ({
 	mutationFn: ({ providerConfigId, req }: UpsertUserChatProviderKeyArgs) =>
-		API.experimental.upsertUserChatProviderKey(providerConfigId, req),
+		API.experimental.upsertUserAIProviderKey(providerConfigId, req),
 	onSuccess: async () => {
 		await Promise.all([
 			queryClient.invalidateQueries({
@@ -1633,7 +1661,7 @@ export const upsertUserChatProviderKey = (queryClient: QueryClient) => ({
 
 export const deleteUserChatProviderKey = (queryClient: QueryClient) => ({
 	mutationFn: (providerConfigId: string) =>
-		API.experimental.deleteUserChatProviderKey(providerConfigId),
+		API.experimental.deleteUserAIProviderKey(providerConfigId),
 	onSuccess: async () => {
 		await Promise.all([
 			queryClient.invalidateQueries({
@@ -1652,9 +1680,63 @@ const invalidateChatConfigurationQueries = async (queryClient: QueryClient) => {
 	]);
 };
 
+const defaultAIProviderDisplayName = (provider: string): string => {
+	switch (provider.trim().toLowerCase()) {
+		case "openai":
+			return "OpenAI";
+		case "anthropic":
+			return "Anthropic";
+		case "azure":
+			return "Azure OpenAI";
+		case "bedrock":
+			return "AWS Bedrock";
+		case "google":
+			return "Google";
+		case "openai-compat":
+		case "openai-compatible":
+		case "openai_compatible":
+			return "OpenAI-compatible";
+		case "openrouter":
+			return "OpenRouter";
+		case "vercel":
+			return "Vercel AI Gateway";
+		default:
+			return provider;
+	}
+};
+
+const generatedAIProviderName = (provider: string): string => {
+	const suffix =
+		globalThis.crypto?.randomUUID?.() ??
+		`${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+	return `${provider}-${suffix}`;
+};
+
+const normalizeAIProviderType = (provider: string): TypesGen.AIProviderType => {
+	const normalized = provider.trim().toLowerCase();
+	switch (normalized) {
+		case "openai-compatible":
+		case "openai_compatible":
+			return "openai-compat";
+		default:
+			return normalized as TypesGen.AIProviderType;
+	}
+};
+
 export const createChatProviderConfig = (queryClient: QueryClient) => ({
-	mutationFn: (req: TypesGen.CreateChatProviderConfigRequest) =>
-		API.experimental.createChatProviderConfig(req),
+	mutationFn: (req: TypesGen.CreateChatProviderConfigRequest) => {
+		const providerType = normalizeAIProviderType(req.provider);
+		const apiKey = req.api_key?.trim();
+		return API.experimental.createAIProvider({
+			type: providerType,
+			name: generatedAIProviderName(providerType),
+			display_name:
+				req.display_name || defaultAIProviderDisplayName(providerType),
+			base_url: req.base_url ?? "",
+			enabled: req.enabled ?? true,
+			api_keys: apiKey ? [apiKey] : undefined,
+		});
+	},
 	onSuccess: async () => {
 		await invalidateChatConfigurationQueries(queryClient);
 	},
@@ -1666,11 +1748,23 @@ type UpdateChatProviderConfigMutationArgs = {
 };
 
 export const updateChatProviderConfig = (queryClient: QueryClient) => ({
-	mutationFn: ({
+	mutationFn: async ({
 		providerConfigId,
 		req,
-	}: UpdateChatProviderConfigMutationArgs) =>
-		API.experimental.updateChatProviderConfig(providerConfigId, req),
+	}: UpdateChatProviderConfigMutationArgs) => {
+		const apiKey = req.api_key?.trim();
+		return API.experimental.updateAIProvider(providerConfigId, {
+			display_name: req.display_name,
+			base_url: req.base_url,
+			enabled: req.enabled,
+			api_keys:
+				req.api_key === undefined
+					? undefined
+					: apiKey
+						? [{ api_key: apiKey }]
+						: [],
+		});
+	},
 	onSuccess: async () => {
 		await invalidateChatConfigurationQueries(queryClient);
 	},
@@ -1678,7 +1772,7 @@ export const updateChatProviderConfig = (queryClient: QueryClient) => ({
 
 export const deleteChatProviderConfig = (queryClient: QueryClient) => ({
 	mutationFn: (providerConfigId: string) =>
-		API.experimental.deleteChatProviderConfig(providerConfigId),
+		API.experimental.deleteAIProvider(providerConfigId),
 	onSuccess: async () => {
 		await invalidateChatConfigurationQueries(queryClient);
 	},

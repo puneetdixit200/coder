@@ -2076,6 +2076,171 @@ func TestWatchChats(t *testing.T) {
 	})
 }
 
+func TestUserAIProviderKeys(t *testing.T) {
+	t.Parallel()
+
+	createOpenAIProvider := func(t *testing.T, client *codersdk.ExperimentalClient, name string, enabled bool, apiKeys ...string) codersdk.AIProvider {
+		t.Helper()
+
+		provider, err := client.CreateAIProvider(testutil.Context(t, testutil.WaitLong), codersdk.CreateAIProviderRequest{
+			Type:    codersdk.AIProviderTypeOpenAI,
+			Name:    name,
+			Enabled: enabled,
+			BaseURL: "https://api.openai.example.com/v1",
+			APIKeys: apiKeys,
+		})
+		require.NoError(t, err)
+		return provider
+	}
+
+	t.Run("SelfServiceLifecycle", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		adminClient := newChatClient(t)
+		firstUser := coderdtest.CreateFirstUser(t, adminClient.Client)
+		memberClientRaw, _ := coderdtest.CreateAnotherUser(t, adminClient.Client, firstUser.OrganizationID)
+		memberClient := codersdk.NewExperimentalClient(memberClientRaw)
+
+		provider := createOpenAIProvider(t, adminClient, "test-user-key-"+uuid.NewString(), true, "test-provider-api-key")
+
+		configs, err := memberClient.ListUserAIProviderKeyConfigs(ctx)
+		require.NoError(t, err)
+		var cfg *codersdk.UserAIProviderKeyConfig
+		for i := range configs {
+			if configs[i].Provider.ID == provider.ID {
+				cfg = &configs[i]
+				break
+			}
+		}
+		require.NotNil(t, cfg)
+		require.False(t, cfg.HasUserAPIKey)
+		require.True(t, cfg.HasProviderAPIKey)
+		require.True(t, cfg.BYOKEnabled)
+
+		cfgValue, err := memberClient.UpsertUserAIProviderKey(ctx, provider.ID, codersdk.CreateUserAIProviderKeyRequest{APIKey: "test-user-api-key"})
+		require.NoError(t, err)
+		require.Equal(t, provider.ID, cfgValue.Provider.ID)
+		require.True(t, cfgValue.HasUserAPIKey)
+		require.True(t, cfgValue.HasProviderAPIKey)
+		require.True(t, cfgValue.BYOKEnabled)
+
+		configs, err = memberClient.ListUserAIProviderKeyConfigs(ctx)
+		require.NoError(t, err)
+		cfg = nil
+		for i := range configs {
+			if configs[i].Provider.ID == provider.ID {
+				cfg = &configs[i]
+				break
+			}
+		}
+		require.NotNil(t, cfg)
+		require.True(t, cfg.HasUserAPIKey)
+
+		cfgValue, err = memberClient.UpsertUserAIProviderKey(ctx, provider.ID, codersdk.CreateUserAIProviderKeyRequest{APIKey: "replacement-user-api-key"})
+		require.NoError(t, err)
+		require.Equal(t, provider.ID, cfgValue.Provider.ID)
+		require.True(t, cfgValue.HasUserAPIKey)
+
+		configs, err = memberClient.ListUserAIProviderKeyConfigs(ctx)
+		require.NoError(t, err)
+		cfg = nil
+		for i := range configs {
+			if configs[i].Provider.ID == provider.ID {
+				cfg = &configs[i]
+				break
+			}
+		}
+		require.NotNil(t, cfg)
+		require.True(t, cfg.HasUserAPIKey)
+
+		require.NoError(t, memberClient.DeleteUserAIProviderKey(ctx, provider.ID))
+		configs, err = memberClient.ListUserAIProviderKeyConfigs(ctx)
+		require.NoError(t, err)
+		for _, listed := range configs {
+			if listed.Provider.ID == provider.ID {
+				require.False(t, listed.HasUserAPIKey)
+				return
+			}
+		}
+		t.Fatal("provider config not found")
+	})
+
+	t.Run("RejectsDisabledProvider", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		adminClient := newChatClient(t)
+		firstUser := coderdtest.CreateFirstUser(t, adminClient.Client)
+		memberClientRaw, _ := coderdtest.CreateAnotherUser(t, adminClient.Client, firstUser.OrganizationID)
+		memberClient := codersdk.NewExperimentalClient(memberClientRaw)
+
+		provider := createOpenAIProvider(t, adminClient, "test-disabled-user-key-"+uuid.NewString(), false)
+
+		_, err := memberClient.UpsertUserAIProviderKey(ctx, provider.ID, codersdk.CreateUserAIProviderKeyRequest{APIKey: "test-user-api-key"})
+		sdkErr := requireSDKError(t, err, http.StatusBadRequest)
+		require.Equal(t, "AI provider is disabled.", sdkErr.Message)
+	})
+
+	t.Run("RejectsLargeAPIKey", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		adminClient := newChatClient(t)
+		firstUser := coderdtest.CreateFirstUser(t, adminClient.Client)
+		memberClientRaw, _ := coderdtest.CreateAnotherUser(t, adminClient.Client, firstUser.OrganizationID)
+		memberClient := codersdk.NewExperimentalClient(memberClientRaw)
+
+		provider := createOpenAIProvider(t, adminClient, "test-large-user-key-"+uuid.NewString(), true)
+
+		_, err := memberClient.UpsertUserAIProviderKey(ctx, provider.ID, codersdk.CreateUserAIProviderKeyRequest{APIKey: strings.Repeat("x", 10241)})
+		sdkErr := requireSDKError(t, err, http.StatusBadRequest)
+		require.Equal(t, "API key too large.", sdkErr.Message)
+	})
+
+	t.Run("RejectsEmptyAPIKey", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		adminClient := newChatClient(t)
+		firstUser := coderdtest.CreateFirstUser(t, adminClient.Client)
+		memberClientRaw, _ := coderdtest.CreateAnotherUser(t, adminClient.Client, firstUser.OrganizationID)
+		memberClient := codersdk.NewExperimentalClient(memberClientRaw)
+
+		provider := createOpenAIProvider(t, adminClient, "test-empty-user-key-"+uuid.NewString(), true)
+
+		_, err := memberClient.UpsertUserAIProviderKey(ctx, provider.ID, codersdk.CreateUserAIProviderKeyRequest{APIKey: "  "})
+		sdkErr := requireSDKError(t, err, http.StatusBadRequest)
+		require.Equal(t, "API key is required.", sdkErr.Message)
+	})
+
+	t.Run("BYOKDisabledRejectsUpsertAndAllowsDelete", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		values := chatDeploymentValues(t)
+		values.AI.BridgeConfig.AllowBYOK = serpent.Bool(false)
+		client := newChatClientWithDeploymentValues(t, values)
+		_ = coderdtest.CreateFirstUser(t, client.Client)
+
+		provider := createOpenAIProvider(t, client, "test-byok-disabled-"+uuid.NewString(), true)
+
+		_, err := client.UpsertUserAIProviderKey(ctx, provider.ID, codersdk.CreateUserAIProviderKeyRequest{APIKey: "test-user-api-key"})
+		sdkErr := requireSDKError(t, err, http.StatusForbidden)
+		require.Equal(t, "BYOK is disabled.", sdkErr.Message)
+
+		configs, err := client.ListUserAIProviderKeyConfigs(ctx)
+		require.NoError(t, err)
+		for _, cfg := range configs {
+			if cfg.Provider.ID == provider.ID {
+				require.False(t, cfg.BYOKEnabled)
+				break
+			}
+		}
+		require.NoError(t, client.DeleteUserAIProviderKey(ctx, provider.ID))
+	})
+}
+
 func TestListChatProviders(t *testing.T) {
 	t.Parallel()
 
@@ -3748,6 +3913,72 @@ func TestCreateChatModelConfig(t *testing.T) {
 		require.Equal(t, "Chat provider is not configured.", sdkErr.Message)
 	})
 
+	t.Run("WithAIProviderID", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		client := newChatClient(t)
+		_ = coderdtest.CreateFirstUser(t, client.Client)
+		provider, err := client.CreateAIProvider(ctx, codersdk.CreateAIProviderRequest{
+			Type:    codersdk.AIProviderTypeOpenAI,
+			Name:    "test-model-config-provider-" + uuid.NewString(),
+			Enabled: true,
+		})
+		require.NoError(t, err)
+
+		contextLimit := int64(4096)
+		modelConfig, err := client.CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
+			AIProviderID: &provider.ID,
+			Model:        "gpt-4o-mini",
+			ContextLimit: &contextLimit,
+		})
+		require.NoError(t, err)
+		require.Equal(t, "openai", modelConfig.Provider)
+		require.NotNil(t, modelConfig.AIProviderID)
+		require.Equal(t, provider.ID, *modelConfig.AIProviderID)
+	})
+
+	t.Run("AIProviderIDNotConfigured", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		client := newChatClient(t)
+		_ = coderdtest.CreateFirstUser(t, client.Client)
+
+		missingProviderID := uuid.New()
+		contextLimit := int64(4096)
+		_, err := client.CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
+			AIProviderID: &missingProviderID,
+			Model:        "gpt-4o-mini",
+			ContextLimit: &contextLimit,
+		})
+		sdkErr := requireSDKError(t, err, http.StatusBadRequest)
+		require.Equal(t, "AI provider is not configured.", sdkErr.Message)
+	})
+
+	t.Run("AIProviderIDDisabled", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		client := newChatClient(t)
+		_ = coderdtest.CreateFirstUser(t, client.Client)
+		provider, err := client.CreateAIProvider(ctx, codersdk.CreateAIProviderRequest{
+			Type:    codersdk.AIProviderTypeOpenAI,
+			Name:    "test-disabled-model-provider-" + uuid.NewString(),
+			Enabled: false,
+		})
+		require.NoError(t, err)
+
+		contextLimit := int64(4096)
+		_, err = client.CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
+			AIProviderID: &provider.ID,
+			Model:        "gpt-4o-mini",
+			ContextLimit: &contextLimit,
+		})
+		sdkErr := requireSDKError(t, err, http.StatusBadRequest)
+		require.Equal(t, "AI provider is disabled.", sdkErr.Message)
+	})
+
 	t.Run("ForbiddenForOrganizationMember", func(t *testing.T) {
 		t.Parallel()
 
@@ -3928,6 +4159,97 @@ func TestUpdateChatModelConfig(t *testing.T) {
 			"cost.output_price_per_million_tokens must be greater than or equal to zero",
 			sdkErr.Detail,
 		)
+	})
+
+	t.Run("UpdateAIProviderID", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		client := newChatClient(t)
+		_ = coderdtest.CreateFirstUser(t, client.Client)
+		modelConfig := createChatModelConfig(t, client)
+		provider, err := client.CreateAIProvider(ctx, codersdk.CreateAIProviderRequest{
+			Type:    codersdk.AIProviderTypeAnthropic,
+			Name:    "test-update-model-provider-" + uuid.NewString(),
+			Enabled: true,
+		})
+		require.NoError(t, err)
+
+		updated, err := client.UpdateChatModelConfig(ctx, modelConfig.ID, codersdk.UpdateChatModelConfigRequest{
+			AIProviderID: &provider.ID,
+			Model:        "claude-3-5-sonnet-latest",
+		})
+		require.NoError(t, err)
+		require.Equal(t, "anthropic", updated.Provider)
+		require.NotNil(t, updated.AIProviderID)
+		require.Equal(t, provider.ID, *updated.AIProviderID)
+	})
+
+	t.Run("UpdateProviderPreservesAIProviderIDWhenTypeUnchanged", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		client := newChatClient(t)
+		_ = coderdtest.CreateFirstUser(t, client.Client)
+		modelConfig := createChatModelConfig(t, client)
+		provider, err := client.CreateAIProvider(ctx, codersdk.CreateAIProviderRequest{
+			Type:    codersdk.AIProviderTypeAnthropic,
+			Name:    "test-preserve-model-provider-" + uuid.NewString(),
+			Enabled: true,
+		})
+		require.NoError(t, err)
+
+		updated, err := client.UpdateChatModelConfig(ctx, modelConfig.ID, codersdk.UpdateChatModelConfigRequest{
+			AIProviderID: &provider.ID,
+			Model:        "claude-3-5-sonnet-latest",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, updated.AIProviderID)
+
+		updated, err = client.UpdateChatModelConfig(ctx, modelConfig.ID, codersdk.UpdateChatModelConfigRequest{
+			Provider: "anthropic",
+			Model:    "claude-3-5-haiku-latest",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, updated.AIProviderID)
+		require.Equal(t, provider.ID, *updated.AIProviderID)
+	})
+
+	t.Run("UpdateAIProviderIDNotConfigured", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		client := newChatClient(t)
+		_ = coderdtest.CreateFirstUser(t, client.Client)
+		modelConfig := createChatModelConfig(t, client)
+
+		missingProviderID := uuid.New()
+		_, err := client.UpdateChatModelConfig(ctx, modelConfig.ID, codersdk.UpdateChatModelConfigRequest{
+			AIProviderID: &missingProviderID,
+		})
+		sdkErr := requireSDKError(t, err, http.StatusBadRequest)
+		require.Equal(t, "AI provider is not configured.", sdkErr.Message)
+	})
+
+	t.Run("UpdateAIProviderIDDisabled", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		client := newChatClient(t)
+		_ = coderdtest.CreateFirstUser(t, client.Client)
+		modelConfig := createChatModelConfig(t, client)
+		provider, err := client.CreateAIProvider(ctx, codersdk.CreateAIProviderRequest{
+			Type:    codersdk.AIProviderTypeOpenAI,
+			Name:    "test-update-disabled-model-provider-" + uuid.NewString(),
+			Enabled: false,
+		})
+		require.NoError(t, err)
+
+		_, err = client.UpdateChatModelConfig(ctx, modelConfig.ID, codersdk.UpdateChatModelConfigRequest{
+			AIProviderID: &provider.ID,
+		})
+		sdkErr := requireSDKError(t, err, http.StatusBadRequest)
+		require.Equal(t, "AI provider is disabled.", sdkErr.Message)
 	})
 
 	t.Run("ProviderNotConfigured", func(t *testing.T) {

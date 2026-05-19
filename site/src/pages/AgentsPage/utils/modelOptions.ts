@@ -233,6 +233,7 @@ export const formatProviderLabel = (provider: string): string => {
 			return "AWS Bedrock";
 		case "google":
 			return "Google";
+		case "openai-compat":
 		case "openai-compatible":
 		case "openai_compatible":
 			return "OpenAI-compatible";

@@ -13,7 +13,6 @@ import { Alert, AlertDescription, AlertTitle } from "#/components/Alert/Alert";
 import { Button } from "#/components/Button/Button";
 import { Input } from "#/components/Input/Input";
 import { Spinner } from "#/components/Spinner/Spinner";
-import { Switch } from "#/components/Switch/Switch";
 import {
 	Tooltip,
 	TooltipContent,
@@ -25,7 +24,6 @@ import { ConfirmDeleteDialog } from "../ConfirmDeleteDialog";
 import type { ProviderState } from "./ChatModelAdminPanel";
 import { readOptionalString } from "./helpers";
 import { ProviderIcon } from "./ProviderIcon";
-import { normalizeProviderPolicyDefaults } from "./providerPolicyDefaults";
 
 // Sentinel value used to represent an existing API key that the
 // backend will not reveal. If the user has not touched the field,
@@ -69,20 +67,17 @@ export const ProviderForm: FC<ProviderFormProps> = ({
 			? "https://api.example.com"
 			: "https://api.example.com/v1";
 
-	const normalizedProviderConfig = providerConfig
-		? normalizeProviderPolicyDefaults(providerConfig)
-		: undefined;
+	// AI Providers use deployment-wide BYOK policy instead of per-provider
+	// credential policy toggles. Keep the legacy provider config shape stable
+	// for the surrounding UI while avoiding editable no-op fields.
+	const centralAPIKeyEnabled = true;
+	const allowUserAPIKey = providerState.allowUserAPIKey;
 
 	// Initial values are snapshotted when the provider config changes
 	// so we can detect dirty state.
 	const [initialValues] = useState(() => ({
 		displayName: readOptionalString(providerConfig?.display_name) ?? "",
 		baseURL,
-		centralAPIKeyEnabled:
-			normalizedProviderConfig?.central_api_key_enabled ?? true,
-		allowUserAPIKey: normalizedProviderConfig?.allow_user_api_key ?? false,
-		allowCentralAPIKeyFallback:
-			normalizedProviderConfig?.allow_central_api_key_fallback ?? false,
 	}));
 
 	const [displayName, setDisplayName] = useState(initialValues.displayName);
@@ -92,50 +87,25 @@ export const ProviderForm: FC<ProviderFormProps> = ({
 	const [apiKeyTouched, setApiKeyTouched] = useState(false);
 	const [apiKeyModified, setApiKeyModified] = useState(false);
 	const [baseURLValue, setBaseURLValue] = useState(initialValues.baseURL);
-	const [centralAPIKeyEnabled, setCentralAPIKeyEnabled] = useState(
-		initialValues.centralAPIKeyEnabled,
-	);
-	const [allowUserAPIKey, setAllowUserAPIKey] = useState(
-		initialValues.allowUserAPIKey,
-	);
-	const [allowCentralAPIKeyFallback, setAllowCentralAPIKeyFallback] = useState(
-		initialValues.allowCentralAPIKeyFallback,
-	);
 	const [confirmingDelete, setConfirmingDelete] = useState(false);
 
 	const isBedrockProvider = provider === "bedrock";
 	const isAPIKeyEnvManaged = isEnvPreset && !providerConfig;
 	const shouldShowAPIKeyField = centralAPIKeyEnabled;
-	const shouldShowFallbackToggle = centralAPIKeyEnabled && allowUserAPIKey;
-	const effectiveInitialFallback =
-		initialValues.centralAPIKeyEnabled &&
-		initialValues.allowUserAPIKey &&
-		initialValues.allowCentralAPIKeyFallback;
-	const effectiveFallback =
-		shouldShowFallbackToggle && allowCentralAPIKeyFallback;
-	// Most providers require a stored deployment key whenever central-key
-	// usage is enabled and there is no saved key yet. Bedrock can also use
-	// ambient AWS credentials from the Coder server, so its API key stays
-	// optional.
+	// Provider-scoped keys are required when BYOK is unavailable, except
+	// Bedrock can use ambient AWS credentials.
 	const requiresAPIKey =
-		!isAPIKeyEnvManaged &&
-		!isBedrockProvider &&
-		centralAPIKeyEnabled &&
-		!providerState.hasManagedAPIKey;
+		!allowUserAPIKey && !isBedrockProvider && !providerState.hasManagedAPIKey;
 
 	const effectiveApiKey =
 		apiKeyTouched && apiKey !== API_KEY_PLACEHOLDER ? apiKey.trim() : "";
 	const hasTypedAPIKey = effectiveApiKey.length > 0;
-	// Clearing a saved Bedrock bearer token switches the provider back
-	// to ambient AWS credentials, so updates must send an explicit
-	// empty string.
-	const isClearingBedrockAPIKey =
-		isBedrockProvider &&
-		providerState.hasManagedAPIKey &&
-		apiKeyModified &&
-		effectiveApiKey === "";
+	// Clearing a saved provider-scoped key switches the provider to
+	// BYOK-only behavior, or ambient AWS credentials for Bedrock.
+	const isClearingAPIKey =
+		providerState.hasManagedAPIKey && apiKeyModified && effectiveApiKey === "";
 	const hasPendingAPIKeyChange =
-		(centralAPIKeyEnabled && hasTypedAPIKey) || isClearingBedrockAPIKey;
+		(centralAPIKeyEnabled && hasTypedAPIKey) || isClearingAPIKey;
 	const shouldCreateAPIKey = centralAPIKeyEnabled && hasTypedAPIKey;
 	const hasCredentialSource = centralAPIKeyEnabled || allowUserAPIKey;
 	const apiKeyDescription = isBedrockProvider
@@ -145,24 +115,19 @@ export const ProviderForm: FC<ProviderFormProps> = ({
 		? "Optional. Overrides the Bedrock runtime endpoint. Set AWS_REGION on the Coder server to select the target region."
 		: "Custom endpoint for this provider. Leave empty to use the default.";
 	const apiKeyPlaceholder = isBedrockProvider ? "Enter bearer token" : "sk-...";
-	const deleteProviderDescription = normalizedProviderConfig?.allow_user_api_key
-		? "Are you sure you want to delete this provider? Any personal API " +
-			"keys that users have saved for this provider will also be " +
-			"permanently deleted. This action is irreversible."
-		: "Are you sure you want to delete this provider? This action is irreversible.";
-	// New Bedrock providers can be saved immediately with ambient AWS
-	// credentials, even before any fields differ from their defaults.
-	const hasNewBedrockAmbientConfiguration =
-		isBedrockProvider && !providerConfig && centralAPIKeyEnabled;
+	const deleteProviderDescription =
+		"Are you sure you want to delete this provider? The provider will be " +
+		"disabled and hidden from new model configuration. Existing model " +
+		"configs that reference it remain saved but cannot run until updated.";
+	// New providers can be saved immediately so admins can enable
+	// BYOK-only providers before storing any provider-scoped key.
+	const hasNewProviderConfiguration = !providerConfig && centralAPIKeyEnabled;
 
 	const isDirty =
 		displayName.trim() !== initialValues.displayName ||
 		hasPendingAPIKeyChange ||
 		baseURLValue.trim() !== initialValues.baseURL.trim() ||
-		centralAPIKeyEnabled !== initialValues.centralAPIKeyEnabled ||
-		allowUserAPIKey !== initialValues.allowUserAPIKey ||
-		effectiveFallback !== effectiveInitialFallback ||
-		hasNewBedrockAmbientConfiguration;
+		hasNewProviderConfiguration;
 
 	const canSave =
 		!providerConfigsUnavailable &&
@@ -177,7 +142,7 @@ export const ProviderForm: FC<ProviderFormProps> = ({
 			providerConfig?.allow_user_api_key === true);
 
 	const handleAddModel = () => {
-		const params = new URLSearchParams({ newModel: provider });
+		const params = new URLSearchParams({ newModel: providerState.key });
 		navigate(`/agents/settings/models?${params.toString()}`, {
 			state: { pushed: true },
 		});
@@ -213,15 +178,6 @@ export const ProviderForm: FC<ProviderFormProps> = ({
 				...(trimmedBaseURL !== currentBaseURL && {
 					base_url: trimmedBaseURL,
 				}),
-				...(centralAPIKeyEnabled !== initialValues.centralAPIKeyEnabled && {
-					central_api_key_enabled: centralAPIKeyEnabled,
-				}),
-				...(allowUserAPIKey !== initialValues.allowUserAPIKey && {
-					allow_user_api_key: allowUserAPIKey,
-				}),
-				...(effectiveFallback !== effectiveInitialFallback && {
-					allow_central_api_key_fallback: effectiveFallback,
-				}),
 			};
 
 			if (Object.keys(req).length === 0) {
@@ -239,9 +195,6 @@ export const ProviderForm: FC<ProviderFormProps> = ({
 			const req: TypesGen.CreateChatProviderConfigRequest = {
 				provider,
 				...(shouldCreateAPIKey && { api_key: effectiveApiKey }),
-				central_api_key_enabled: centralAPIKeyEnabled,
-				allow_user_api_key: allowUserAPIKey,
-				allow_central_api_key_fallback: effectiveFallback,
 				...(trimmedDisplayName && {
 					display_name: trimmedDisplayName,
 				}),
@@ -384,49 +337,7 @@ export const ProviderForm: FC<ProviderFormProps> = ({
 								disabled={isDisabled}
 							/>
 						</ProviderField>
-
-						<div className="space-y-3 rounded-lg border border-solid border-border/70 bg-surface-secondary/30 p-4">
-							<div className="space-y-1">
-								<h3 className="m-0 text-[13px] font-semibold text-content-primary">
-									Key policy
-								</h3>
-								<p className="m-0 text-xs text-content-secondary">
-									Control which credential sources this provider can use.
-								</p>
-							</div>
-							<div className="space-y-3">
-								<ProviderToggleField
-									label="Central API key"
-									description="Use a deployment-managed API key for this provider"
-									checked={centralAPIKeyEnabled}
-									onCheckedChange={setCentralAPIKeyEnabled}
-									disabled={isDisabled}
-								/>
-								<ProviderToggleField
-									label="Allow user API keys"
-									description="Let users provide their own API keys for this provider"
-									checked={allowUserAPIKey}
-									onCheckedChange={setAllowUserAPIKey}
-									disabled={isDisabled}
-								/>
-								{shouldShowFallbackToggle && (
-									<ProviderToggleField
-										label="Use central key as fallback"
-										description="When a user has not saved a personal key, fall back to the central API key"
-										checked={effectiveFallback}
-										onCheckedChange={setAllowCentralAPIKeyFallback}
-										disabled={isDisabled}
-									/>
-								)}
-							</div>
-							{!hasCredentialSource && (
-								<p className="m-0 text-xs text-content-destructive">
-									At least one credential source must be enabled
-								</p>
-							)}
-						</div>
 					</div>
-
 					{/* Footer, pushed to bottom */}
 					<div className="mt-auto pt-6">
 						<hr className="mb-4 border-0 border-t border-solid border-border" />
@@ -477,48 +388,6 @@ export const ProviderForm: FC<ProviderFormProps> = ({
 					onOpenChange={(open) => !open && setConfirmingDelete(false)}
 				/>
 			)}
-		</div>
-	);
-};
-
-interface ProviderToggleFieldProps {
-	label: string;
-	description: string;
-	checked: boolean;
-	onCheckedChange: (checked: boolean) => void;
-	disabled?: boolean;
-}
-
-const ProviderToggleField: FC<ProviderToggleFieldProps> = ({
-	label,
-	description,
-	checked,
-	onCheckedChange,
-	disabled,
-}) => {
-	const labelId = useId();
-	const descriptionId = useId();
-
-	return (
-		<div className="flex items-start justify-between gap-4">
-			<div className="min-w-0 space-y-1">
-				<p
-					id={labelId}
-					className="m-0 text-sm font-medium text-content-primary"
-				>
-					{label}
-				</p>
-				<p id={descriptionId} className="m-0 text-xs text-content-secondary">
-					{description}
-				</p>
-			</div>
-			<Switch
-				checked={checked}
-				onCheckedChange={onCheckedChange}
-				disabled={disabled}
-				aria-labelledby={labelId}
-				aria-describedby={descriptionId}
-			/>
 		</div>
 	);
 };
