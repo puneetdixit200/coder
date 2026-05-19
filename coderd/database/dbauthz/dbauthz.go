@@ -3455,12 +3455,7 @@ func (q *querier) GetGroupByOrgAndName(ctx context.Context, arg database.GetGrou
 }
 
 func (q *querier) GetGroupMember(ctx context.Context, arg database.GetGroupMemberParams) (database.GroupMemberTable, error) {
-	// Reading a group membership requires read on the parent group.
-	group, err := q.db.GetGroupByID(ctx, arg.GroupID)
-	if err != nil {
-		return database.GroupMemberTable{}, err
-	}
-	if err := q.authorizeContext(ctx, policy.ActionRead, group); err != nil {
+	if _, err := q.GetGroupByID(ctx, arg.GroupID); err != nil { // AuthZ check
 		return database.GroupMemberTable{}, err
 	}
 	return q.db.GetGroupMember(ctx, arg)
@@ -4481,12 +4476,7 @@ func (q *querier) GetUnexpiredLicenses(ctx context.Context) ([]database.License,
 }
 
 func (q *querier) GetUserAIBudgetOverride(ctx context.Context, userID uuid.UUID) (database.UserAiBudgetOverride, error) {
-	// Reading a user's AI budget override requires read on the parent user.
-	u, err := q.db.GetUserByID(ctx, userID)
-	if err != nil {
-		return database.UserAiBudgetOverride{}, err
-	}
-	if err := q.authorizeContext(ctx, policy.ActionRead, u); err != nil {
+	if _, err := q.GetUserByID(ctx, userID); err != nil { // AuthZ check
 		return database.UserAiBudgetOverride{}, err
 	}
 	return q.db.GetUserAIBudgetOverride(ctx, userID)
