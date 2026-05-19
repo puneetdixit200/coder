@@ -1,6 +1,5 @@
 import { type FC, useEffect, useRef, useState } from "react";
 import {
-	type QueryClient,
 	useInfiniteQuery,
 	useMutation,
 	useQuery,
@@ -16,21 +15,20 @@ import {
 	cancelChatListRefetches,
 	chatDiffContentsKey,
 	chatKey,
-	chatMatchesInfiniteChatsFilters,
 	chatModelConfigs,
 	chatModels,
 	chatsByWorkspaceKeyPrefix,
-	chatsKey,
 	findChatInInfiniteChatsCaches,
-	getInfiniteChatsFiltersFromQueryKey,
 	type InfiniteChatsFilters,
 	infiniteChats,
 	invalidateChatListQueries,
 	invalidateChatListQueriesWhere,
 	mergeWatchedChatIntoCaches,
 	pinChat,
+	prependRootChatToMatchingCaches,
 	proposeChatTitle,
 	regenerateChatTitle,
+	removeChatFromChatStatusFilteredCaches,
 	removeChildFromParentInCache,
 	reorderPinnedChat,
 	unarchiveChat,
@@ -65,16 +63,9 @@ import {
 
 export type { AgentsOutletContext } from "./AgentsPageView";
 
-type ChatListCache = {
-	pages: TypesGen.Chat[][];
-	pageParams: unknown[];
-};
-
-const UNREAD_MEMBERSHIP_EVENT_KINDS = new Set<TypesGen.ChatWatchEventKind>([
-	"action_required",
-	"created",
-	"status_change",
-]);
+const CHAT_STATUS_MEMBERSHIP_EVENT_KINDS = new Set<TypesGen.ChatWatchEventKind>(
+	["action_required", "created", "status_change"],
+);
 
 const filterMatchesKnownArchiveState = (
 	filters: InfiniteChatsFilters | undefined,
@@ -83,14 +74,14 @@ const filterMatchesKnownArchiveState = (
 	return filters?.archived === undefined || filters.archived === chat.archived;
 };
 
-const shouldInvalidateUnreadFilters = (
+const shouldInvalidateChatStatusFilters = (
 	chat: TypesGen.Chat,
 	eventKind: TypesGen.ChatWatchEventKind,
 ): boolean => {
 	if (chat.parent_chat_id) {
 		return false;
 	}
-	return UNREAD_MEMBERSHIP_EVENT_KINDS.has(eventKind);
+	return CHAT_STATUS_MEMBERSHIP_EVENT_KINDS.has(eventKind);
 };
 
 const shouldInvalidatePRFilters = (
@@ -98,70 +89,6 @@ const shouldInvalidatePRFilters = (
 	eventKind: TypesGen.ChatWatchEventKind,
 ): boolean => {
 	return !chat.parent_chat_id && eventKind === "diff_status_change";
-};
-
-const removeChatFromUnreadFilteredCaches = (
-	queryClient: QueryClient,
-	chatId: string,
-) => {
-	queryClient.setQueriesData<ChatListCache>(
-		{
-			queryKey: chatsKey,
-			predicate: (query) =>
-				getInfiniteChatsFiltersFromQueryKey(query.queryKey)?.unreadOnly ===
-				true,
-		},
-		(prev) => {
-			if (!prev?.pages) {
-				return prev;
-			}
-			let changed = false;
-			const nextPages = prev.pages.map((page) => {
-				const nextPage = page.filter((chat) => chat.id !== chatId);
-				if (nextPage.length !== page.length) {
-					changed = true;
-				}
-				return nextPage;
-			});
-			return changed ? { ...prev, pages: nextPages } : prev;
-		},
-	);
-};
-
-const prependRootChatToMatchingCaches = (
-	queryClient: QueryClient,
-	chat: TypesGen.Chat,
-) => {
-	queryClient.setQueriesData<ChatListCache>(
-		{
-			queryKey: chatsKey,
-			predicate: (query) => {
-				const filters = getInfiniteChatsFiltersFromQueryKey(query.queryKey);
-				return (
-					chatMatchesInfiniteChatsFilters(chat, filters) &&
-					(filters?.prStatuses?.length ?? 0) === 0 &&
-					!filters?.unreadOnly
-				);
-			},
-		},
-		(prev) => {
-			if (!prev?.pages) {
-				return prev;
-			}
-			const exists = prev.pages.some((page) =>
-				page.some((c) => c.id === chat.id),
-			);
-			if (exists) {
-				return prev;
-			}
-			return {
-				...prev,
-				pages: prev.pages.map((page, index) =>
-					index === 0 ? [chat, ...page] : page,
-				),
-			};
-		},
-	);
 };
 
 const AgentsPage: FC = () => {
@@ -223,7 +150,10 @@ const AgentsPage: FC = () => {
 		infiniteChats({
 			archived: sidebarFilters.archived === "archived",
 			prStatuses: sidebarFilters.prStatuses,
-			unreadOnly: sidebarFilters.unreadOnly,
+			chatStatus:
+				sidebarFilters.chatStatus === "all"
+					? undefined
+					: sidebarFilters.chatStatus,
 		}),
 	);
 	// Model queries are kept here for the sidebar, which displays
@@ -604,7 +534,11 @@ const AgentsPage: FC = () => {
 			});
 			return changed ? next : chats;
 		});
-		removeChatFromUnreadFilteredCaches(queryClient, agentId);
+		removeChatFromChatStatusFilteredCaches(queryClient, agentId, "unread");
+		void invalidateChatListQueriesWhere(
+			queryClient,
+			(filters) => filters?.chatStatus === "read",
+		);
 	}, [agentId, queryClient]);
 	useEffect(() => {
 		return createReconnectingWebSocket({
@@ -702,7 +636,7 @@ const AgentsPage: FC = () => {
 								}
 								return (
 									(filters?.prStatuses?.length ?? 0) > 0 ||
-									filters?.unreadOnly === true
+									filters?.chatStatus !== undefined
 								);
 							});
 						}
@@ -719,15 +653,27 @@ const AgentsPage: FC = () => {
 								return (filters?.prStatuses?.length ?? 0) > 0;
 							});
 						}
-						if (shouldInvalidateUnreadFilters(updatedChat, chatEvent.kind)) {
+						if (
+							shouldInvalidateChatStatusFilters(updatedChat, chatEvent.kind)
+						) {
 							if (updatedChat.id === activeChatIDRef.current) {
-								removeChatFromUnreadFilteredCaches(queryClient, updatedChat.id);
+								removeChatFromChatStatusFilteredCaches(
+									queryClient,
+									updatedChat.id,
+									"unread",
+								);
+								void invalidateChatListQueriesWhere(queryClient, (filters) => {
+									if (!filterMatchesKnownArchiveState(filters, updatedChat)) {
+										return false;
+									}
+									return filters?.chatStatus === "read";
+								});
 							} else {
 								void invalidateChatListQueriesWhere(queryClient, (filters) => {
 									if (!filterMatchesKnownArchiveState(filters, updatedChat)) {
 										return false;
 									}
-									return filters?.unreadOnly === true;
+									return filters?.chatStatus !== undefined;
 								});
 							}
 						}

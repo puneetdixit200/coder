@@ -12,6 +12,7 @@ import { SearchField } from "#/components/SearchField/SearchField";
 import { cn } from "#/utils/cn";
 import {
 	AGENT_PR_STATUS_ORDER,
+	type AgentChatStatusFilter,
 	type AgentPRStatusFilter,
 	type AgentSidebarFilters,
 	type AgentSidebarGroupBy,
@@ -22,7 +23,7 @@ const DEFAULT_FILTERS: AgentSidebarFilters = {
 	archived: "active",
 	groupBy: "date",
 	prStatuses: [],
-	unreadOnly: false,
+	chatStatus: "all",
 };
 
 const PR_STATUS_LABELS: Record<AgentPRStatusFilter, string> = {
@@ -31,6 +32,23 @@ const PR_STATUS_LABELS: Record<AgentPRStatusFilter, string> = {
 	merged: "Merged",
 	closed: "Closed",
 };
+
+const GROUP_OPTIONS: readonly Readonly<{
+	value: AgentSidebarGroupBy;
+	label: string;
+}>[] = [
+	{ value: "date", label: "Date" },
+	{ value: "chat_status", label: "Chat status" },
+];
+
+const CHAT_STATUS_OPTIONS: readonly Readonly<{
+	value: AgentChatStatusFilter;
+	label: string;
+}>[] = [
+	{ value: "all", label: "All" },
+	{ value: "unread", label: "Unread" },
+	{ value: "read", label: "Read" },
+];
 
 interface FilterDropdownProps {
 	readonly filters: AgentSidebarFilters;
@@ -42,7 +60,7 @@ const hasActiveFilters = (filters: AgentSidebarFilters): boolean => {
 		filters.archived !== DEFAULT_FILTERS.archived ||
 		filters.groupBy !== DEFAULT_FILTERS.groupBy ||
 		filters.prStatuses.length > 0 ||
-		filters.unreadOnly
+		filters.chatStatus !== DEFAULT_FILTERS.chatStatus
 	);
 };
 
@@ -74,6 +92,9 @@ export const FilterDropdown: FC<FilterDropdownProps> = ({
 		);
 	};
 
+	const visibleGroupOptions = GROUP_OPTIONS.filter((option) =>
+		matchesOption("Group", option.label),
+	);
 	const archiveOptions: readonly Readonly<{
 		value: ArchivedFilter;
 		label: string;
@@ -87,11 +108,14 @@ export const FilterDropdown: FC<FilterDropdownProps> = ({
 	const visiblePRStatuses = AGENT_PR_STATUS_ORDER.filter((status) =>
 		matchesOption("PR status", PR_STATUS_LABELS[status]),
 	);
-	const showUnreadOption = matchesOption("Chat status", "Unread");
+	const visibleChatStatusOptions = CHAT_STATUS_OPTIONS.filter((option) =>
+		matchesOption("Chat status", option.label),
+	);
 	const showFilterOptions =
 		visibleArchiveOptions.length > 0 ||
 		visiblePRStatuses.length > 0 ||
-		showUnreadOption;
+		visibleChatStatusOptions.length > 0;
+	const showAnyOptions = visibleGroupOptions.length > 0 || showFilterOptions;
 
 	const setGroupBy = (value: string) => {
 		if (value !== "date" && value !== "chat_status") {
@@ -154,32 +178,32 @@ export const FilterDropdown: FC<FilterDropdownProps> = ({
 				className="mobile-full-width-dropdown mobile-full-width-dropdown-top-below-header w-80 p-0 text-[13px]"
 			>
 				<div className="flex flex-col gap-4 p-4">
-					<section className="space-y-2">
-						<h2
-							id={`${id}-group-heading`}
-							className="m-0 text-xs font-medium text-content-secondary"
-						>
-							Group
-						</h2>
-						<RadioGroup
-							aria-labelledby={`${id}-group-heading`}
-							value={stagedFilters.groupBy}
-							onValueChange={setGroupBy}
-							className="gap-1"
-						>
-							<div className="flex items-center gap-2">
-								<RadioGroupItem id={`${id}-group-date`} value="date" />
-								<label htmlFor={`${id}-group-date`}>Date</label>
-							</div>
-							<div className="flex items-center gap-2">
-								<RadioGroupItem
-									id={`${id}-group-chat-status`}
-									value="chat_status"
-								/>
-								<label htmlFor={`${id}-group-chat-status`}>Chat status</label>
-							</div>
-						</RadioGroup>
-					</section>
+					{visibleGroupOptions.length > 0 && (
+						<section className="space-y-2">
+							<h2
+								id={`${id}-group-heading`}
+								className="m-0 text-xs font-medium text-content-secondary"
+							>
+								Group
+							</h2>
+							<RadioGroup
+								aria-labelledby={`${id}-group-heading`}
+								value={stagedFilters.groupBy}
+								onValueChange={setGroupBy}
+								className="gap-1"
+							>
+								{visibleGroupOptions.map((option) => {
+									const optionId = `${id}-group-${option.value}`;
+									return (
+										<div key={option.value} className="flex items-center gap-2">
+											<RadioGroupItem id={optionId} value={option.value} />
+											<label htmlFor={optionId}>{option.label}</label>
+										</div>
+									);
+								})}
+							</RadioGroup>
+						</section>
+					)}
 
 					<section className="space-y-3">
 						<h2 className="m-0 text-xs font-medium text-content-secondary">
@@ -250,28 +274,45 @@ export const FilterDropdown: FC<FilterDropdownProps> = ({
 							</div>
 						)}
 
-						{showUnreadOption && (
+						{visibleChatStatusOptions.length > 0 && (
 							<div className="space-y-2">
-								<h3 className="m-0 text-xs font-medium text-content-secondary">
+								<h3
+									id={`${id}-chat-status-heading`}
+									className="m-0 text-xs font-medium text-content-secondary"
+								>
 									Chat status
 								</h3>
-								<div className="flex items-center gap-2">
-									<Checkbox
-										id={`${id}-chat-unread`}
-										checked={stagedFilters.unreadOnly}
-										onCheckedChange={(checked) =>
-											setStagedFilters({
-												...stagedFilters,
-												unreadOnly: checked === true,
-											})
+								<RadioGroup
+									aria-labelledby={`${id}-chat-status-heading`}
+									value={stagedFilters.chatStatus}
+									onValueChange={(value) => {
+										if (
+											value === "all" ||
+											value === "read" ||
+											value === "unread"
+										) {
+											setStagedFilters({ ...stagedFilters, chatStatus: value });
 										}
-									/>
-									<label htmlFor={`${id}-chat-unread`}>Unread</label>
-								</div>
+									}}
+									className="gap-1"
+								>
+									{visibleChatStatusOptions.map((option) => {
+										const optionId = `${id}-chat-status-${option.value}`;
+										return (
+											<div
+												key={option.value}
+												className="flex items-center gap-2"
+											>
+												<RadioGroupItem id={optionId} value={option.value} />
+												<label htmlFor={optionId}>{option.label}</label>
+											</div>
+										);
+									})}
+								</RadioGroup>
 							</div>
 						)}
 
-						{!showFilterOptions && (
+						{!showAnyOptions && (
 							<p className="m-0 text-content-secondary">No filters found</p>
 						)}
 					</section>

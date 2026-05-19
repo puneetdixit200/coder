@@ -18,6 +18,7 @@ import {
 	chatDebugRunsKey,
 	chatDiffContentsKey,
 	chatKey,
+	chatMatchesInfiniteChatsFilters,
 	chatMessagesKey,
 	chatsKey,
 	createChat,
@@ -33,9 +34,11 @@ import {
 	mergeWatchedChatSummary,
 	paginatedChatCostUsers,
 	pinChat,
+	prependRootChatToMatchingCaches,
 	promoteChatQueuedMessage,
 	proposeChatTitle,
 	regenerateChatTitle,
+	removeChatFromChatStatusFilteredCaches,
 	removeChildFromParentInCache,
 	reorderPinnedChat,
 	TERMINAL_RUN_STATUSES,
@@ -284,7 +287,7 @@ describe("invalidateChatListQueries", () => {
 		seedInfiniteChats(queryClient, [target], {
 			archived: false,
 			prStatuses: ["open"],
-			unreadOnly: true,
+			chatStatus: "unread",
 		});
 
 		expect(findChatInInfiniteChatsCaches(queryClient, target.id)).toEqual(
@@ -292,13 +295,13 @@ describe("invalidateChatListQueries", () => {
 		);
 	});
 
-	it("unread filtered list queries are invalidated when unread membership can change", async () => {
+	it("chat status filtered list queries are invalidated when membership can change", async () => {
 		const queryClient = createTestQueryClient();
 
 		seedInfiniteChats(queryClient, [makeChat("chat-default")]);
 		seedInfiniteChats(queryClient, [makeChat("chat-unread")], {
 			archived: false,
-			unreadOnly: true,
+			chatStatus: "unread",
 		});
 		seedInfiniteChats(queryClient, [makeChat("chat-pr")], {
 			archived: false,
@@ -307,12 +310,12 @@ describe("invalidateChatListQueries", () => {
 
 		await invalidateChatListQueriesWhere(
 			queryClient,
-			(filters) => filters?.unreadOnly === true,
+			(filters) => filters?.chatStatus === "unread",
 		);
 
 		expect(
 			queryClient.getQueryState(
-				getInfiniteChatsTestKey({ archived: false, unreadOnly: true }),
+				getInfiniteChatsTestKey({ archived: false, chatStatus: "unread" }),
 			)?.isInvalidated,
 		).toBe(true);
 		expect(
@@ -323,6 +326,67 @@ describe("invalidateChatListQueries", () => {
 				getInfiniteChatsTestKey({ archived: false, prStatuses: ["open"] }),
 			)?.isInvalidated,
 		).not.toBe(true);
+	});
+
+	it("created root chats are prepended to matching unfiltered caches", () => {
+		const queryClient = createTestQueryClient();
+		const activeChat = makeChat("active-created", { archived: false });
+
+		seedInfiniteChats(queryClient, [makeChat("active-existing")], {
+			archived: false,
+		});
+		seedInfiniteChats(queryClient, [makeChat("archived-existing")], {
+			archived: true,
+		});
+		seedInfiniteChats(queryClient, [makeChat("unread-existing")], {
+			archived: false,
+			chatStatus: "unread",
+		});
+
+		prependRootChatToMatchingCaches(queryClient, activeChat);
+
+		expect(readInfiniteChats(queryClient, { archived: false })?.[0]).toEqual(
+			activeChat,
+		);
+		expect(readInfiniteChats(queryClient, { archived: true })).toHaveLength(1);
+		expect(
+			readInfiniteChats(queryClient, {
+				archived: false,
+				chatStatus: "unread",
+			}),
+		).toHaveLength(1);
+	});
+
+	it("watched chat status changes remove stale unread cache membership", async () => {
+		const queryClient = createTestQueryClient();
+		const chat = makeChat("status-changing", { has_unread: true });
+
+		seedInfiniteChats(queryClient, [chat], {
+			archived: false,
+			chatStatus: "unread",
+		});
+		seedInfiniteChats(queryClient, [makeChat("read-existing")], {
+			archived: false,
+			chatStatus: "read",
+		});
+
+		removeChatFromChatStatusFilteredCaches(queryClient, chat.id, "unread");
+		await invalidateChatListQueriesWhere(
+			queryClient,
+			(filters) => filters?.chatStatus === "read",
+		);
+
+		expect(
+			readInfiniteChats(queryClient, {
+				archived: false,
+				chatStatus: "unread",
+			}),
+		).toEqual([]);
+		expect(
+			queryClient.getQueryState(
+				getInfiniteChatsTestKey({ archived: false, chatStatus: "read" }),
+			)?.isInvalidated,
+		).toBe(true);
 	});
 
 	it("pr filtered list queries are invalidated on diff_status_change for root chats", async () => {
@@ -350,6 +414,26 @@ describe("invalidateChatListQueries", () => {
 		expect(
 			queryClient.getQueryState(infiniteChatsTestKey)?.isInvalidated,
 		).not.toBe(true);
+	});
+});
+
+describe("chatMatchesInfiniteChatsFilters", () => {
+	it("matches unread and read root chat status filters", () => {
+		const unreadChat = makeChat("unread", { has_unread: true });
+		const readChat = makeChat("read", { has_unread: false });
+
+		expect(
+			chatMatchesInfiniteChatsFilters(unreadChat, { chatStatus: "unread" }),
+		).toBe(true);
+		expect(
+			chatMatchesInfiniteChatsFilters(readChat, { chatStatus: "unread" }),
+		).toBe(false);
+		expect(
+			chatMatchesInfiniteChatsFilters(readChat, { chatStatus: "read" }),
+		).toBe(true);
+		expect(
+			chatMatchesInfiniteChatsFilters(unreadChat, { chatStatus: "read" }),
+		).toBe(false);
 	});
 });
 
@@ -1601,12 +1685,12 @@ describe("infiniteChats", () => {
 			});
 		});
 
-		it("builds q from archived, prStatuses, and unreadOnly", async () => {
+		it("builds q from archived, prStatuses, and chatStatus", async () => {
 			vi.mocked(API.experimental.getChats).mockResolvedValue([]);
 			const { queryFn } = infiniteChats({
 				archived: true,
 				prStatuses: ["merged", "draft", "open"],
-				unreadOnly: true,
+				chatStatus: "unread",
 			});
 
 			await queryFn({ pageParam: 0 });
@@ -1614,7 +1698,23 @@ describe("infiniteChats", () => {
 			expect(API.experimental.getChats).toHaveBeenCalledWith({
 				limit: PAGE_LIMIT,
 				offset: 0,
-				q: "archived:true pr_status:draft,open,merged chat_status:unread",
+				q: "archived:true pr_status:draft,open,merged has_unread:true",
+			});
+		});
+
+		it("builds q for read chat status", async () => {
+			vi.mocked(API.experimental.getChats).mockResolvedValue([]);
+			const { queryFn } = infiniteChats({
+				archived: false,
+				chatStatus: "read",
+			});
+
+			await queryFn({ pageParam: 0 });
+
+			expect(API.experimental.getChats).toHaveBeenCalledWith({
+				limit: PAGE_LIMIT,
+				offset: 0,
+				q: "archived:false has_unread:false",
 			});
 		});
 
@@ -1636,14 +1736,14 @@ describe("infiniteChats", () => {
 				infiniteChats({
 					archived: false,
 					prStatuses: ["open"],
-					unreadOnly: true,
+					chatStatus: "unread",
 					groupBy: "date",
 				}).queryKey,
 			).toEqual(
 				infiniteChats({
 					archived: false,
 					prStatuses: ["open"],
-					unreadOnly: true,
+					chatStatus: "unread",
 					groupBy: "chat_status",
 				}).queryKey,
 			);

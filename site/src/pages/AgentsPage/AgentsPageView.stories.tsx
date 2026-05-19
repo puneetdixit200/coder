@@ -55,7 +55,7 @@ const defaultSidebarFilters: AgentSidebarFilters = {
 	archived: "active",
 	groupBy: "date",
 	prStatuses: [],
-	unreadOnly: false,
+	chatStatus: "all",
 };
 
 const defaultModelOptions: ModelSelectorOption[] = [

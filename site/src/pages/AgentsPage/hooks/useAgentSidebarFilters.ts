@@ -1,5 +1,8 @@
 import { useSearchParams } from "react-router";
-import type { ChatListPRStatusFilter } from "#/api/queries/chats";
+import type {
+	ChatListPRStatusFilter,
+	ChatListStatusFilter,
+} from "#/api/queries/chats";
 
 export type ArchivedFilter = "active" | "archived";
 export type AgentSidebarGroupBy = "date" | "chat_status";
@@ -11,12 +14,13 @@ export const AGENT_PR_STATUS_ORDER = [
 ] as const satisfies readonly ChatListPRStatusFilter[];
 
 export type AgentPRStatusFilter = ChatListPRStatusFilter;
+export type AgentChatStatusFilter = ChatListStatusFilter | "all";
 
 export type AgentSidebarFilters = Readonly<{
 	archived: ArchivedFilter;
 	groupBy: AgentSidebarGroupBy;
 	prStatuses: readonly AgentPRStatusFilter[];
-	unreadOnly: boolean;
+	chatStatus: AgentChatStatusFilter;
 }>;
 
 type UseAgentSidebarFiltersResult = readonly [
@@ -29,7 +33,7 @@ const DEFAULT_FILTERS: AgentSidebarFilters = {
 	archived: "active",
 	groupBy: "date",
 	prStatuses: [],
-	unreadOnly: false,
+	chatStatus: "all",
 };
 
 const agentPRStatusSet = new Set<AgentPRStatusFilter>(AGENT_PR_STATUS_ORDER);
@@ -62,6 +66,15 @@ const parsePRStatuses = (
 	);
 };
 
+const parseChatStatus = (
+	searchParams: URLSearchParams,
+): AgentChatStatusFilter => {
+	const value = searchParams.get("chat_status")?.trim().toLowerCase();
+	return value === "read" || value === "unread"
+		? value
+		: DEFAULT_FILTERS.chatStatus;
+};
+
 const clearSidebarFilterParams = (searchParams: URLSearchParams) => {
 	searchParams.delete("archived");
 	searchParams.delete("group_by");
@@ -86,8 +99,8 @@ const writeSidebarFilters = (
 	if (prStatuses.length > 0) {
 		searchParams.set("pr_status", prStatuses.join(","));
 	}
-	if (filters.unreadOnly) {
-		searchParams.set("chat_status", "unread");
+	if (filters.chatStatus !== "all") {
+		searchParams.set("chat_status", filters.chatStatus);
 	}
 };
 
@@ -104,7 +117,7 @@ export const useAgentSidebarFilters = (): UseAgentSidebarFiltersResult => {
 				? "chat_status"
 				: DEFAULT_FILTERS.groupBy,
 		prStatuses: parsePRStatuses(searchParams),
-		unreadOnly: searchParams.get("chat_status") === "unread",
+		chatStatus: parseChatStatus(searchParams),
 	};
 
 	const setFilters = (next: AgentSidebarFilters) => {

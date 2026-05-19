@@ -8,14 +8,14 @@ const defaultFilters: AgentSidebarFilters = {
 	archived: "active",
 	groupBy: "date",
 	prStatuses: [],
-	unreadOnly: false,
+	chatStatus: "all",
 };
 
 const appliedFilters: AgentSidebarFilters = {
 	archived: "archived",
 	groupBy: "chat_status",
 	prStatuses: ["draft", "open"],
-	unreadOnly: true,
+	chatStatus: "unread",
 };
 
 const meta: Meta<typeof FilterDropdown> = {
@@ -75,7 +75,13 @@ export const OpensFilterPopover: Story = {
 			within(dialog).getByRole("checkbox", { name: "Closed" }),
 		).toBeInTheDocument();
 		await expect(
-			within(dialog).getByRole("checkbox", { name: "Unread" }),
+			within(dialog).getByRole("radiogroup", { name: "Chat status" }),
+		).toBeInTheDocument();
+		await expect(
+			within(dialog).getByRole("radio", { name: "Unread" }),
+		).toBeInTheDocument();
+		await expect(
+			within(dialog).getByRole("radio", { name: "Read" }),
 		).toBeInTheDocument();
 		await expect(
 			within(dialog).getByRole("button", { name: "Clear all" }),
@@ -108,7 +114,7 @@ export const AppliesStagedFilters: Story = {
 			within(dialog).getByRole("checkbox", { name: "Draft" }),
 		);
 		await userEvent.click(
-			within(dialog).getByRole("checkbox", { name: "Unread" }),
+			within(dialog).getByRole("radio", { name: "Unread" }),
 		);
 
 		expect(args.onFiltersChange).not.toHaveBeenCalled();
@@ -121,7 +127,7 @@ export const AppliesStagedFilters: Story = {
 			archived: "archived",
 			groupBy: "chat_status",
 			prStatuses: ["draft"],
-			unreadOnly: true,
+			chatStatus: "unread",
 		});
 		await waitFor(() => {
 			expect(
@@ -161,7 +167,10 @@ export const ClearAllResetsFilters: Story = {
 			within(dialog).getByRole("checkbox", { name: "Open" }),
 		).not.toBeChecked();
 		await expect(
-			within(dialog).getByRole("checkbox", { name: "Unread" }),
+			within(dialog).getByRole("radio", { name: "All" }),
+		).toBeChecked();
+		await expect(
+			within(dialog).getByRole("radio", { name: "Unread" }),
 		).not.toBeChecked();
 		expect(args.onFiltersChange).not.toHaveBeenCalled();
 
@@ -195,6 +204,32 @@ export const SearchFiltersOptions: Story = {
 		).not.toBeInTheDocument();
 		expect(
 			within(dialog).queryByRole("radio", { name: "Archived" }),
+		).not.toBeInTheDocument();
+	},
+};
+
+export const SearchFiltersGroupOptions: Story = {
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		const body = within(document.body);
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Filter agents" }),
+		);
+		const dialog = await body.findByRole("dialog", { name: "Filter agents" });
+		await userEvent.type(
+			within(dialog).getByRole("textbox", { name: "Search filters" }),
+			"date",
+		);
+
+		await expect(
+			within(dialog).getByRole("radio", { name: "Date" }),
+		).toBeVisible();
+		expect(
+			within(dialog).queryByText("No filters found"),
+		).not.toBeInTheDocument();
+		expect(
+			within(dialog).queryByRole("checkbox", { name: "Draft" }),
 		).not.toBeInTheDocument();
 	},
 };

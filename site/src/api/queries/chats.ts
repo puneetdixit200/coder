@@ -24,11 +24,12 @@ export const chatPromptsKey = (chatId: string) =>
 	["chats", chatId, "prompts"] as const;
 
 export type ChatListPRStatusFilter = "draft" | "open" | "merged" | "closed";
+export type ChatListStatusFilter = "read" | "unread";
 
 export type InfiniteChatsFilters = Readonly<{
 	archived?: boolean;
 	prStatuses?: readonly ChatListPRStatusFilter[];
-	unreadOnly?: boolean;
+	chatStatus?: ChatListStatusFilter;
 }>;
 
 const CHAT_LIST_PR_STATUS_ORDER = [
@@ -40,6 +41,13 @@ const CHAT_LIST_PR_STATUS_ORDER = [
 
 const chatListPRStatusSet = new Set<ChatListPRStatusFilter>(
 	CHAT_LIST_PR_STATUS_ORDER,
+);
+const CHAT_LIST_STATUS_FILTERS = [
+	"read",
+	"unread",
+] as const satisfies readonly ChatListStatusFilter[];
+const chatListStatusSet = new Set<ChatListStatusFilter>(
+	CHAT_LIST_STATUS_FILTERS,
 );
 
 type InfiniteChatsCacheData = InfiniteData<TypesGen.Chat[]>;
@@ -80,12 +88,16 @@ const normalizeInfiniteChatsFilters = (
 	const archived =
 		typeof filters?.archived === "boolean" ? filters.archived : undefined;
 	const prStatuses = normalizeInfiniteChatsPRStatuses(filters?.prStatuses);
-	const unreadOnly = filters?.unreadOnly === true ? true : undefined;
+	const chatStatus =
+		typeof filters?.chatStatus === "string" &&
+		chatListStatusSet.has(filters.chatStatus as ChatListStatusFilter)
+			? (filters.chatStatus as ChatListStatusFilter)
+			: undefined;
 
 	if (
 		archived === undefined &&
 		prStatuses === undefined &&
-		unreadOnly === undefined
+		chatStatus === undefined
 	) {
 		return undefined;
 	}
@@ -93,7 +105,7 @@ const normalizeInfiniteChatsFilters = (
 	return {
 		...(archived !== undefined ? { archived } : {}),
 		...(prStatuses !== undefined ? { prStatuses } : {}),
-		...(unreadOnly ? { unreadOnly } : {}),
+		...(chatStatus !== undefined ? { chatStatus } : {}),
 	};
 };
 
@@ -497,7 +509,7 @@ const isChatListQuery = (query: { queryKey: readonly unknown[] }): boolean => {
 	return segment === undefined || typeof segment === "object";
 };
 
-export const getInfiniteChatsFiltersFromQueryKey = (
+const getInfiniteChatsFiltersFromQueryKey = (
 	queryKey: readonly unknown[],
 ): InfiniteChatsFilters | undefined => {
 	if (!isChatListQuery({ queryKey })) {
@@ -526,6 +538,71 @@ export const invalidateChatListQueriesWhere = (
 			return predicate(getInfiniteChatsFiltersFromQueryKey(query.queryKey));
 		},
 	});
+};
+
+export const removeChatFromChatStatusFilteredCaches = (
+	queryClient: QueryClient,
+	chatId: string,
+	chatStatus: ChatListStatusFilter,
+) => {
+	queryClient.setQueriesData<InfiniteChatsCacheData>(
+		{
+			queryKey: chatsKey,
+			predicate: (query) =>
+				getInfiniteChatsFiltersFromQueryKey(query.queryKey)?.chatStatus ===
+				chatStatus,
+		},
+		(prev) => {
+			if (!prev?.pages) {
+				return prev;
+			}
+			let changed = false;
+			const nextPages = prev.pages.map((page) => {
+				const nextPage = page.filter((chat) => chat.id !== chatId);
+				if (nextPage.length !== page.length) {
+					changed = true;
+				}
+				return nextPage;
+			});
+			return changed ? { ...prev, pages: nextPages } : prev;
+		},
+	);
+};
+
+export const prependRootChatToMatchingCaches = (
+	queryClient: QueryClient,
+	chat: TypesGen.Chat,
+) => {
+	queryClient.setQueriesData<InfiniteChatsCacheData>(
+		{
+			queryKey: chatsKey,
+			predicate: (query) => {
+				const filters = getInfiniteChatsFiltersFromQueryKey(query.queryKey);
+				return (
+					chatMatchesInfiniteChatsFilters(chat, filters) &&
+					(filters?.prStatuses?.length ?? 0) === 0 &&
+					filters?.chatStatus === undefined
+				);
+			},
+		},
+		(prev) => {
+			if (!prev?.pages) {
+				return prev;
+			}
+			const exists = prev.pages.some((page) =>
+				page.some((c) => c.id === chat.id),
+			);
+			if (exists) {
+				return prev;
+			}
+			return {
+				...prev,
+				pages: prev.pages.map((page, index) =>
+					index === 0 ? [chat, ...page] : page,
+				),
+			};
+		},
+	);
 };
 
 export const invalidateChatListQueries = (queryClient: QueryClient) => {
@@ -616,8 +693,8 @@ const getInfiniteChatsQueryString = (
 	if (filters?.prStatuses?.length) {
 		qParts.push(`pr_status:${filters.prStatuses.join(",")}`);
 	}
-	if (filters?.unreadOnly) {
-		qParts.push("chat_status:unread");
+	if (filters?.chatStatus) {
+		qParts.push(`has_unread:${filters.chatStatus === "unread"}`);
 	}
 	return qParts.length > 0 ? qParts.join(" ") : undefined;
 };
@@ -648,7 +725,10 @@ export const chatMatchesInfiniteChatsFilters = (
 	if (filters?.archived !== undefined && chat.archived !== filters.archived) {
 		return false;
 	}
-	if (filters?.unreadOnly && !chat.has_unread) {
+	if (filters?.chatStatus === "unread" && !chat.has_unread) {
+		return false;
+	}
+	if (filters?.chatStatus === "read" && chat.has_unread) {
 		return false;
 	}
 	if (filters?.prStatuses?.length) {

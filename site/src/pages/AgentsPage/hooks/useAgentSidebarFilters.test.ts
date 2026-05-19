@@ -10,7 +10,7 @@ describe(useAgentSidebarFilters.name, () => {
 		archived: "archived",
 		groupBy: "chat_status",
 		prStatuses: ["draft", "merged"],
-		unreadOnly: true,
+		chatStatus: "unread",
 	};
 
 	it("returns defaults for /agents", async () => {
@@ -25,7 +25,7 @@ describe(useAgentSidebarFilters.name, () => {
 			archived: "active",
 			groupBy: "date",
 			prStatuses: [],
-			unreadOnly: false,
+			chatStatus: "all",
 		});
 	});
 
@@ -45,8 +45,22 @@ describe(useAgentSidebarFilters.name, () => {
 			archived: "archived",
 			groupBy: "chat_status",
 			prStatuses: ["draft", "open", "closed"],
-			unreadOnly: true,
+			chatStatus: "unread",
 		});
+	});
+
+	it("parses read chat_status from the URL", async () => {
+		const { result } = await renderHookWithAuth(
+			() => useAgentSidebarFilters(),
+			{
+				routingOptions: {
+					path: "/agents",
+					route: "/agents?chat_status=READ",
+				},
+			},
+		);
+
+		expect(result.current[0]).toMatchObject({ chatStatus: "read" });
 	});
 
 	it("drops invalid pr_status values and canonicalizes order", async () => {
@@ -86,7 +100,7 @@ describe(useAgentSidebarFilters.name, () => {
 				archived: "active",
 				groupBy: "date",
 				prStatuses: [],
-				unreadOnly: false,
+				chatStatus: "all",
 			});
 		});
 		await waitFor(() =>
@@ -94,7 +108,7 @@ describe(useAgentSidebarFilters.name, () => {
 				archived: "active",
 				groupBy: "date",
 				prStatuses: [],
-				unreadOnly: false,
+				chatStatus: "all",
 			}),
 		);
 
@@ -125,7 +139,7 @@ describe(useAgentSidebarFilters.name, () => {
 				archived: "active",
 				groupBy: "date",
 				prStatuses: [],
-				unreadOnly: false,
+				chatStatus: "all",
 			}),
 		);
 

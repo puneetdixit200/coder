@@ -62,7 +62,7 @@ import {
 	useState,
 } from "react";
 import { useQuery } from "react-query";
-import { Link, NavLink, useLocation, useParams } from "react-router";
+import { Link, NavLink, type To, useLocation, useParams } from "react-router";
 import { userChatProviderConfigs } from "#/api/queries/chats";
 import type {
 	Chat,
@@ -159,6 +159,9 @@ export function isSettingsView(
 ): view is Extract<SidebarView, { panel: "settings" | "settings-admin" }> {
 	return view.panel === "settings" || view.panel === "settings-admin";
 }
+
+const normalizeLocationSearch = (search: string): string =>
+	search === "" || search.startsWith("?") ? search : `?${search}`;
 
 interface AgentsSidebarProps {
 	chats: readonly Chat[];
@@ -421,6 +424,7 @@ interface ChatTreeNodeProps {
 
 const ChatTreeNode: FC<ChatTreeNodeProps> = ({ chat, isChildNode }) => {
 	const location = useLocation();
+	const locationSearch = normalizeLocationSearch(location.search);
 	const {
 		chatTree,
 		chatById,
@@ -657,7 +661,7 @@ const ChatTreeNode: FC<ChatTreeNodeProps> = ({ chat, isChildNode }) => {
 						<NavLink
 							to={{
 								pathname: `/agents/${chat.id}`,
-								search: location.search,
+								search: locationSearch,
 							}}
 							className="flex min-h-0 min-w-0 flex-1 items-start gap-2 rounded-[inherit] py-1 pr-0.5 text-inherit no-underline"
 						>
@@ -918,6 +922,7 @@ export const AgentsSidebar: FC<AgentsSidebarProps> = (props) => {
 	const { user, signOut } = useAuthenticated();
 	const { appearance, buildInfo } = useDashboard();
 	const location = useLocation();
+	const locationSearch = normalizeLocationSearch(location.search);
 	const sidebarView = sidebarViewFromPath(location.pathname);
 	const isSettingsPanel = isSettingsView(sidebarView);
 	const isFallbackToUserPanel =
@@ -963,7 +968,7 @@ export const AgentsSidebar: FC<AgentsSidebarProps> = (props) => {
 		.map((id) => chatById.get(id))
 		.filter((chat): chat is Chat => chat !== undefined && chat.pin_order === 0);
 	const hasAppliedResultFilters =
-		sidebarFilters.prStatuses.length > 0 || sidebarFilters.unreadOnly;
+		sidebarFilters.prStatuses.length > 0 || sidebarFilters.chatStatus !== "all";
 	const disablePinnedReordering = hasAppliedResultFilters;
 
 	// Local override for pinned order during drag. Applied
@@ -1183,7 +1188,7 @@ export const AgentsSidebar: FC<AgentsSidebarProps> = (props) => {
 							>
 								<Link
 									to="/agents/settings"
-									state={{ from: location.pathname + location.search }}
+									state={{ from: location.pathname + locationSearch }}
 								>
 									<SettingsIcon />
 								</Link>
@@ -1205,7 +1210,7 @@ export const AgentsSidebar: FC<AgentsSidebarProps> = (props) => {
 						icon={SquarePenIcon}
 						label="New Agent"
 						active={!activeChatId && sidebarView.panel === "chats"}
-						to={`/agents${location.search}`}
+						to={{ pathname: "/agents", search: locationSearch }}
 						onClick={onBeforeNewAgent}
 						disabled={isCreating}
 					/>
@@ -1594,7 +1599,7 @@ type SettingsNavItemProps = {
 	disabled?: boolean;
 	trailingIcon?: FC<{ className?: string }>;
 } & (
-	| { to: string; replace?: boolean; state?: unknown; onClick?: () => void }
+	| { to: To; replace?: boolean; state?: unknown; onClick?: () => void }
 	| { to?: never; replace?: never; state?: never; onClick: () => void }
 );
 

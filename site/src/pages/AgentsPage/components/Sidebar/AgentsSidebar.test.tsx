@@ -109,7 +109,7 @@ const defaultSidebarFilters: AgentSidebarFilters = {
 	archived: "active",
 	groupBy: "date",
 	prStatuses: [],
-	unreadOnly: false,
+	chatStatus: "all",
 };
 
 const defaultProps: React.ComponentProps<typeof AgentsSidebar> = {
@@ -161,6 +161,30 @@ describe("AgentsSidebar filters", () => {
 		});
 	});
 
+	it("applies the read chat status filter", async () => {
+		const user = userEvent.setup();
+		const onSidebarFiltersChange = vi.fn();
+
+		render(
+			<Wrapper>
+				<AgentsSidebar
+					{...defaultProps}
+					sidebarFilters={defaultSidebarFilters}
+					onSidebarFiltersChange={onSidebarFiltersChange}
+				/>
+			</Wrapper>,
+		);
+
+		await user.click(screen.getByRole("button", { name: "Filter agents" }));
+		await user.click(screen.getByRole("radio", { name: "Read" }));
+		await user.click(screen.getByRole("button", { name: "Apply" }));
+
+		expect(onSidebarFiltersChange).toHaveBeenCalledWith({
+			...defaultSidebarFilters,
+			chatStatus: "read",
+		});
+	});
+
 	it("clear all resets staged controls to defaults", async () => {
 		const user = userEvent.setup();
 		const onSidebarFiltersChange = vi.fn();
@@ -168,7 +192,7 @@ describe("AgentsSidebar filters", () => {
 			archived: "archived",
 			groupBy: "chat_status",
 			prStatuses: ["draft", "open"],
-			unreadOnly: true,
+			chatStatus: "unread",
 		};
 
 		render(
@@ -188,7 +212,8 @@ describe("AgentsSidebar filters", () => {
 		expect(screen.getByRole("radio", { name: "Active" })).toBeChecked();
 		expect(screen.getByRole("checkbox", { name: "Draft" })).not.toBeChecked();
 		expect(screen.getByRole("checkbox", { name: "Open" })).not.toBeChecked();
-		expect(screen.getByRole("checkbox", { name: "Unread" })).not.toBeChecked();
+		expect(screen.getByRole("radio", { name: "All" })).toBeChecked();
+		expect(screen.getByRole("radio", { name: "Unread" })).not.toBeChecked();
 		expect(onSidebarFiltersChange).not.toHaveBeenCalled();
 
 		await user.click(screen.getByRole("button", { name: "Apply" }));
@@ -207,7 +232,7 @@ describe("AgentsSidebar filters", () => {
 					chats={[]}
 					sidebarFilters={{
 						...defaultSidebarFilters,
-						unreadOnly: true,
+						chatStatus: "unread",
 					}}
 					onClearSidebarFilters={onClearSidebarFilters}
 				/>

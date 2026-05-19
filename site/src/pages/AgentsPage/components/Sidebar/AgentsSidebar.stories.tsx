@@ -43,7 +43,7 @@ const defaultSidebarFilters: AgentSidebarFilters = {
 	archived: "active",
 	groupBy: "date",
 	prStatuses: [],
-	unreadOnly: false,
+	chatStatus: "all",
 };
 
 const defaultModelConfigs: TypesGen.ChatModelConfig[] = [
@@ -737,7 +737,10 @@ export const SidebarFilterMenu: Story = {
 			within(dialog).getByRole("radiogroup", { name: "Archive status" }),
 		).toBeInTheDocument();
 		await expect(
-			within(dialog).getByRole("checkbox", { name: "Unread" }),
+			within(dialog).getByRole("radiogroup", { name: "Chat status" }),
+		).toBeInTheDocument();
+		await expect(
+			within(dialog).getByRole("radio", { name: "Read" }),
 		).toBeInTheDocument();
 		await userEvent.keyboard("{Escape}");
 		await waitFor(() => {
@@ -832,7 +835,7 @@ export const UnreadFilterEmptyState: Story = {
 	args: {
 		sidebarFilters: {
 			...defaultSidebarFilters,
-			unreadOnly: true,
+			chatStatus: "unread",
 		},
 		chats: [],
 	},
@@ -856,6 +859,52 @@ export const UnreadFilterEmptyState: Story = {
 		await expect(
 			canvas.getByRole("button", { name: "Clear filters" }),
 		).toBeVisible();
+	},
+};
+
+export const CombinedPRStatusAndUnreadFilters: Story = {
+	args: {
+		sidebarFilters: {
+			...defaultSidebarFilters,
+			prStatuses: ["draft", "open"],
+			chatStatus: "unread",
+		},
+		chats: [
+			buildChat({
+				id: "combined-draft-unread",
+				title: "Unread draft PR agent",
+				has_unread: true,
+				updated_at: recentTimestamp,
+				diff_status: {
+					chat_id: "combined-draft-unread",
+					url: "https://github.com/coder/coder/pull/204",
+					pull_request_state: "open",
+					pull_request_title: "wip: combined filters",
+					pull_request_draft: true,
+					changes_requested: false,
+					additions: 24,
+					deletions: 4,
+					changed_files: 3,
+				},
+			}),
+		],
+	},
+	parameters: {
+		reactRouter: reactRouterParameters({
+			location: {
+				path: "/agents",
+				searchParams: {
+					pr_status: "draft,open",
+					chat_status: "unread",
+				},
+			},
+			routing: agentsRouting,
+		}),
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await expect(canvas.getByText("Unread draft PR agent")).toBeVisible();
+		await expect(canvas.getByLabelText("Filter agents")).toBeInTheDocument();
 	},
 };
 
@@ -1421,7 +1470,7 @@ export const PreservesSidebarFiltersOnChatNavigation: Story = {
 			archived: "archived",
 			groupBy: "chat_status",
 			prStatuses: ["draft", "open"],
-			unreadOnly: true,
+			chatStatus: "unread",
 		},
 	},
 	parameters: {
@@ -2191,6 +2240,54 @@ export const SettingsAdminAgentsEntryPreserved: Story = {
 	},
 };
 
+export const PreservesSidebarFiltersOnNewAgentNavigation: Story = {
+	args: {
+		chats: [
+			buildChat({
+				id: "archived-new-agent-1",
+				title: "Archived new agent source",
+				archived: true,
+				updated_at: recentTimestamp,
+			}),
+		],
+		sidebarFilters: {
+			...defaultSidebarFilters,
+			archived: "archived",
+			groupBy: "chat_status",
+			prStatuses: ["draft", "open"],
+			chatStatus: "unread",
+		},
+	},
+	parameters: {
+		reactRouter: reactRouterParameters({
+			location: {
+				path: "/agents/archived-new-agent-1",
+				searchParams: {
+					archived: "archived",
+					group_by: "chat_status",
+					pr_status: "draft,open",
+					chat_status: "unread",
+				},
+			},
+			routing: [
+				{ path: "/agents", element: <ChildSearchProbe /> },
+				{ path: "/agents/:agentId", useStoryElement: true },
+			],
+		}),
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByRole("link", { name: "New Agent" }));
+		await waitFor(() => {
+			const search = canvas.getByTestId("child-search").textContent ?? "";
+			expect(search).toContain("archived=archived");
+			expect(search).toContain("group_by=chat_status");
+			expect(search).toContain("pr_status=draft%2Copen");
+			expect(search).toContain("chat_status=unread");
+		});
+	},
+};
+
 export const PreservesSidebarFiltersOnSettingsNavigation: Story = {
 	args: {
 		chats: [
@@ -2206,7 +2303,7 @@ export const PreservesSidebarFiltersOnSettingsNavigation: Story = {
 			archived: "archived",
 			groupBy: "chat_status",
 			prStatuses: ["draft", "open"],
-			unreadOnly: true,
+			chatStatus: "unread",
 		},
 	},
 	parameters: {
