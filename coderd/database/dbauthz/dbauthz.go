@@ -723,6 +723,25 @@ var (
 		}),
 		Scope: rbac.ScopeAll,
 	}.WithCachedASTValue()
+
+	subjectSCIM = rbac.Subject{
+		Type:         rbac.SubjectSCIMProvisioner,
+		FriendlyName: "SCIM Provisioner",
+		ID:           uuid.Nil.String(),
+		Roles: rbac.Roles([]rbac.Role{
+			{
+				Identifier:  rbac.RoleIdentifier{Name: "scim"},
+				DisplayName: "SCIM",
+				Site: rbac.Permissions(map[string][]policy.Action{
+					rbac.ResourceUser.Type:         {policy.ActionCreate, policy.ActionUpdate, policy.ActionRead},
+					rbac.ResourceOrganization.Type: {policy.ActionRead},
+				}),
+				User:    []rbac.Permission{},
+				ByOrgID: map[string]rbac.OrgPermissions{},
+			},
+		}),
+		Scope: rbac.ScopeAll,
+	}.WithCachedASTValue()
 )
 
 // AsProvisionerd returns a context with an actor that has permissions required
@@ -845,6 +864,12 @@ func AsWorkspaceBuilder(ctx context.Context) context.Context {
 // workspaces and deployment config, but nothing else.
 func AsChatd(ctx context.Context) context.Context {
 	return As(ctx, subjectChatd)
+}
+
+// AsSubAgentAPI returns a context with an actor that has permissions required for
+// handling the /scim/v2 routes and provisioning users via SCIM.
+func AsSCIMProvisioner(ctx context.Context) context.Context {
+	return As(ctx, subjectSCIM)
 }
 
 var AsRemoveActor = rbac.Subject{
