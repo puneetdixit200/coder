@@ -343,13 +343,13 @@ func NewAPI(logger slog.Logger, options ...Option) *API {
 		scriptLogger:                func(uuid.UUID) ScriptLogger { return noopScriptLogger{} },
 		injectedSubAgentProcs:       make(map[string]subAgentProcess),
 		usingWorkspaceFolderName:    make(map[string]bool),
-		wsWatcher:                   httpapi.NewWSWatcher(nil),
 	}
 	// The ctx and logger must be set before applying options to avoid
 	// nil pointer dereference.
 	for _, opt := range options {
 		opt(api)
 	}
+	api.wsWatcher = httpapi.NewWSWatcher(api.clock, nil)
 	if api.commandEnv != nil {
 		api.execer = newCommandEnvExecer(
 			api.logger,

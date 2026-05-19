@@ -38,6 +38,7 @@ import (
 	"github.com/coder/coder/v2/tailnet"
 	"github.com/coder/coder/v2/tailnet/tailnettest"
 	"github.com/coder/coder/v2/testutil"
+	"github.com/coder/quartz"
 	"github.com/coder/websocket"
 )
 
@@ -133,7 +134,7 @@ func runWatchChatGitWorkspaceLookupTest(t *testing.T, workspaceErr error, wantSt
 				Authorizer: &mockAuthorizer{},
 				Logger:     logger,
 			},
-			wsWatcher: httpapi.NewWSWatcher(nil),
+			wsWatcher: httpapi.NewWSWatcher(quartz.NewReal(), nil),
 		}
 	)
 
@@ -190,7 +191,7 @@ func TestWatchChatGit(t *testing.T) {
 					Logger:                         logger,
 					DeploymentValues:               &codersdk.DeploymentValues{},
 				},
-				wsWatcher: httpapi.NewWSWatcher(nil),
+				wsWatcher: httpapi.NewWSWatcher(quartz.NewReal(), nil),
 			}
 		)
 
@@ -265,7 +266,7 @@ func TestWatchChatGit(t *testing.T) {
 					Logger:                         logger,
 					DeploymentValues:               &codersdk.DeploymentValues{},
 				},
-				wsWatcher: httpapi.NewWSWatcher(nil),
+				wsWatcher: httpapi.NewWSWatcher(quartz.NewReal(), nil),
 			}
 		)
 
@@ -426,7 +427,7 @@ func TestWatchChatGit(t *testing.T) {
 					Authorizer: &mockAuthorizer{},
 					Logger:     logger,
 				},
-				wsWatcher: httpapi.NewWSWatcher(nil),
+				wsWatcher: httpapi.NewWSWatcher(quartz.NewReal(), nil),
 			}
 		)
 
@@ -605,7 +606,7 @@ func TestWatchChatGit(t *testing.T) {
 					Authorizer: &mockAuthorizer{},
 					Logger:     logger,
 				},
-				wsWatcher: httpapi.NewWSWatcher(nil),
+				wsWatcher: httpapi.NewWSWatcher(quartz.NewReal(), nil),
 			}
 		)
 
@@ -775,7 +776,7 @@ func TestWatchAgentContainers(t *testing.T) {
 					DeploymentValues:               &codersdk.DeploymentValues{},
 					TailnetCoordinator:             tailnettest.NewFakeCoordinator(),
 				},
-				wsWatcher: httpapi.NewWSWatcher(nil),
+				wsWatcher: httpapi.NewWSWatcher(quartz.NewReal(), nil),
 			}
 		)
 
@@ -893,7 +894,7 @@ func TestWatchAgentContainers(t *testing.T) {
 					DeploymentValues:               &codersdk.DeploymentValues{},
 					TailnetCoordinator:             tailnettest.NewFakeCoordinator(),
 				},
-				wsWatcher: httpapi.NewWSWatcher(nil),
+				wsWatcher: httpapi.NewWSWatcher(quartz.NewReal(), nil),
 			}
 		)
 

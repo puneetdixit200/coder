@@ -902,7 +902,7 @@ func New(options *Options) *API {
 	}
 
 	wsMetrics := httpmw.NewWSMetrics(options.PrometheusRegistry)
-	api.wsWatcher = httpapi.NewWSWatcher(wsMetrics.RecordProbe)
+	api.wsWatcher = httpapi.NewWSWatcher(options.Clock, wsMetrics.RecordProbe)
 
 	api.workspaceAppServer = workspaceapps.NewServer(workspaceapps.ServerOptions{
 		Logger: workspaceAppsLogger,

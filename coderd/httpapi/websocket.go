@@ -32,6 +32,13 @@ const (
 // It may be nil, in which case probes are still run but not recorded.
 type ProbeRecorder func(ctx context.Context, result ProbeResult)
 
+// pingCloser is the minimal interface for WebSocket liveness probing.
+// *websocket.Conn satisfies this interface.
+type pingCloser interface {
+	Ping(ctx context.Context) error
+	Close(code websocket.StatusCode, reason string) error
+}
+
 // WSWatcher supervises WebSocket connections for liveness by
 // periodically sending ping frames. On probe failure, the watcher
 // closes the connection with StatusGoingAway and cancels the
@@ -46,10 +53,10 @@ type WSWatcher struct {
 // NewWSWatcher creates a WSWatcher. Pass nil for rec when no
 // recording is needed (e.g. agent-side code without a Prometheus
 // registry).
-func NewWSWatcher(rec ProbeRecorder) *WSWatcher {
+func NewWSWatcher(clk quartz.Clock, rec ProbeRecorder) *WSWatcher {
 	return &WSWatcher{
 		rec:      rec,
-		clk:      quartz.NewReal(),
+		clk:      clk,
 		interval: HeartbeatInterval,
 	}
 }
@@ -62,6 +69,12 @@ func (w *WSWatcher) Watch(parent context.Context, log slog.Logger, conn *websock
 	if w == nil {
 		panic("developer error: WSWatcher is nil")
 	}
+	return w.watch(parent, log, conn)
+}
+
+// watch is the internal implementation that accepts pingCloser,
+// enabling unit tests to inject fake connections.
+func (w *WSWatcher) watch(parent context.Context, log slog.Logger, conn pingCloser) context.Context {
 	ctx, cancel := context.WithCancel(parent)
 	go func() {
 		defer cancel()
@@ -70,7 +83,7 @@ func (w *WSWatcher) Watch(parent context.Context, log slog.Logger, conn *websock
 	return ctx
 }
 
-func (w *WSWatcher) supervise(ctx context.Context, log slog.Logger, conn *websocket.Conn) {
+func (w *WSWatcher) supervise(ctx context.Context, log slog.Logger, conn pingCloser) {
 	ticker := w.clk.NewTicker(w.interval, "WSWatcher")
 	defer ticker.Stop()
 
@@ -99,7 +112,7 @@ func (w *WSWatcher) supervise(ctx context.Context, log slog.Logger, conn *websoc
 	}
 }
 
-func probe(ctx context.Context, conn *websocket.Conn, timeout time.Duration) (ProbeResult, error) {
+func probe(ctx context.Context, conn pingCloser, timeout time.Duration) (ProbeResult, error) {
 	pingCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	err := conn.Ping(pingCtx)

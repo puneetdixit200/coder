@@ -12,6 +12,7 @@ import (
 	"github.com/coder/coder/v2/coderd/httpapi"
 	"github.com/coder/coder/v2/codersdk"
 	"github.com/coder/coder/v2/codersdk/wsjson"
+	"github.com/coder/quartz"
 	"github.com/coder/websocket"
 )
 
@@ -29,7 +30,7 @@ func NewAPI(logger slog.Logger, pathStore *PathStore, opts ...Option) *API {
 		logger:    logger,
 		pathStore: pathStore,
 		opts:      opts,
-		wsWatcher: httpapi.NewWSWatcher(nil),
+		wsWatcher: httpapi.NewWSWatcher(quartz.NewReal(), nil),
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/xerrors"
 
 	"cdr.dev/slog/v3"
 	"github.com/coder/coder/v2/testutil"
@@ -323,4 +324,71 @@ func TestWSWatcher(t *testing.T) {
 		assert.Empty(t, errorEntries,
 			"probe timeout should not produce error-level logs, got: %+v", errorEntries)
 	})
+
+	t.Run("ProbeError", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
+
+		sink := testutil.NewFakeSink(t)
+		logger := sink.Logger()
+		mClock := quartz.NewMock(t)
+		rec := &probeRecords{}
+
+		trap := mClock.Trap().NewTicker("WSWatcher")
+		defer trap.Close()
+
+		fConn := &fakePingCloser{
+			pingErr: xerrors.New("unexpected internal error"),
+		}
+
+		w := &WSWatcher{rec: rec.record, clk: mClock, interval: time.Second}
+		watchCtx := w.watch(ctx, logger, fConn)
+
+		trap.MustWait(ctx).MustRelease(ctx)
+		mClock.Advance(time.Second).MustWait(ctx)
+
+		// Wait for the watch context to be canceled (probe failure).
+		select {
+		case <-watchCtx.Done():
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for watch context to be canceled")
+		}
+
+		assert.Equal(t, 1, rec.count(ProbeError), "expected one error probe")
+		// ProbeError should log at Error level (unlike other failures).
+		errorEntries := sink.Entries(func(e slog.SinkEntry) bool {
+			return e.Level == slog.LevelError
+		})
+		assert.NotEmpty(t, errorEntries, "ProbeError should produce error-level log")
+
+		// Connection should be closed with StatusGoingAway.
+		fConn.mu.Lock()
+		assert.True(t, fConn.closed, "connection should be closed on probe error")
+		assert.Equal(t, websocket.StatusGoingAway, fConn.code)
+		fConn.mu.Unlock()
+	})
+}
+
+// fakePingCloser is a test double for the pingCloser interface.
+type fakePingCloser struct {
+	mu      sync.Mutex
+	pingErr error
+	closed  bool
+	code    websocket.StatusCode
+	reason  string
+}
+
+func (f *fakePingCloser) Ping(context.Context) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.pingErr
+}
+
+func (f *fakePingCloser) Close(code websocket.StatusCode, reason string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.closed = true
+	f.code = code
+	f.reason = reason
+	return nil
 }

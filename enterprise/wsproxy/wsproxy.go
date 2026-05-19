@@ -44,6 +44,7 @@ import (
 	"github.com/coder/coder/v2/site"
 	"github.com/coder/coder/v2/tailnet"
 	"github.com/coder/coder/v2/tailnet/derpmetrics"
+	"github.com/coder/quartz"
 )
 
 // expDERPOnce guards the global expvar.Publish call for the DERP server.
@@ -221,7 +222,7 @@ func New(ctx context.Context, opts *Options) (*Server, error) {
 	if wsMetrics != nil {
 		wsRec = wsMetrics.RecordProbe
 	}
-	wsWatcher := httpapi.NewWSWatcher(wsRec)
+	wsWatcher := httpapi.NewWSWatcher(quartz.NewReal(), wsRec)
 
 	ctx, cancel := context.WithCancel(context.Background())
 

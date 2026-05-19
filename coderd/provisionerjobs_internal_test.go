@@ -25,6 +25,7 @@ import (
 	"github.com/coder/coder/v2/codersdk"
 	"github.com/coder/coder/v2/provisionersdk"
 	"github.com/coder/coder/v2/testutil"
+	"github.com/coder/quartz"
 	"github.com/coder/websocket"
 )
 
@@ -151,7 +152,7 @@ func Test_logFollower_completeBeforeFollow(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mDB := dbmock.NewMockStore(ctrl)
 	ps := pubsub.NewInMemory()
-	wsw := httpapi.NewWSWatcher(nil)
+	wsw := httpapi.NewWSWatcher(quartz.NewReal(), nil)
 	now := dbtime.Now()
 	job := database.ProvisionerJob{
 		ID:        uuid.New(),
@@ -215,7 +216,7 @@ func Test_logFollower_completeBeforeSubscribe(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mDB := dbmock.NewMockStore(ctrl)
 	ps := pubsub.NewInMemory()
-	wsw := httpapi.NewWSWatcher(nil)
+	wsw := httpapi.NewWSWatcher(quartz.NewReal(), nil)
 	now := dbtime.Now()
 	job := database.ProvisionerJob{
 		ID:        uuid.New(),
@@ -294,7 +295,7 @@ func Test_logFollower_EndOfLogs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mDB := dbmock.NewMockStore(ctrl)
 	ps := pubsub.NewInMemory()
-	wsw := httpapi.NewWSWatcher(nil)
+	wsw := httpapi.NewWSWatcher(quartz.NewReal(), nil)
 	now := dbtime.Now()
 	job := database.ProvisionerJob{
 		ID:        uuid.New(),
