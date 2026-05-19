@@ -4572,6 +4572,7 @@ AuthorizationObject can represent a "set" of objects, such as: all workspaces in
 
 ```json
 {
+  "abstract": "string",
   "activity_bump_ms": 0,
   "allow_user_autostart": true,
   "allow_user_autostop": true,
@@ -4608,6 +4609,7 @@ AuthorizationObject can represent a "set" of objects, such as: all workspaces in
 
 | Name                                  | Type                                                                           | Required | Restrictions | Description                                                                                                                                                                                                                                                                                                         |
 |---------------------------------------|--------------------------------------------------------------------------------|----------|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `abstract`                            | string                                                                         | false    |              | Abstract is a longer-form summary used to help agents pick the right template. It must be at most 2048 bytes.                                                                                                                                                                                                       |
 | `activity_bump_ms`                    | integer                                                                        | false    |              | Activity bump ms allows optionally specifying the activity bump duration for all workspaces created from this template. Defaults to 1h but can be set to 0 to disable activity bumping.                                                                                                                             |
 | `allow_user_autostart`                | boolean                                                                        | false    |              | Allow user autostart allows users to set a schedule for autostarting their workspace. By default this is true. This can only be disabled when using an enterprise license.                                                                                                                                          |
 | `allow_user_autostop`                 | boolean                                                                        | false    |              | Allow user autostop allows users to set a custom workspace TTL to use in place of the template's DefaultTTL field. By default this is true. If false, the DefaultTTL will always be used. This can only be disabled when using an enterprise license.                                                               |
@@ -11674,6 +11676,7 @@ Only certain features set these fields: - FeatureManagedAgentLimit|
 
 ```json
 {
+  "abstract": "string",
   "active_user_count": 0,
   "active_version_id": "eae64611-bd53-4a80-bb77-df1e432c0fbc",
   "activity_bump_ms": 0,
@@ -11734,6 +11737,7 @@ Only certain features set these fields: - FeatureManagedAgentLimit|
 
 | Name                               | Type                                                                           | Required | Restrictions | Description                                                                                                                                                                                     |
 |------------------------------------|--------------------------------------------------------------------------------|----------|--------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `abstract`                         | string                                                                         | false    |              |                                                                                                                                                                                                 |
 | `active_user_count`                | integer                                                                        | false    |              | Active user count is set to -1 when loading.                                                                                                                                                    |
 | `active_version_id`                | string                                                                         | false    |              |                                                                                                                                                                                                 |
 | `activity_bump_ms`                 | integer                                                                        | false    |              |                                                                                                                                                                                                 |
@@ -12866,6 +12870,7 @@ Restarts will only happen on weekdays in this list on weeks which line up with W
 
 ```json
 {
+  "abstract": "string",
   "activity_bump_ms": 0,
   "allow_user_autostart": true,
   "allow_user_autostop": true,
@@ -12905,6 +12910,7 @@ Restarts will only happen on weekdays in this list on weeks which line up with W
 
 | Name                               | Type                                                                           | Required | Restrictions | Description                                                                                                                                                                                                                                                                                                                                                                        |
 |------------------------------------|--------------------------------------------------------------------------------|----------|--------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `abstract`                         | string                                                                         | false    |              |                                                                                                                                                                                                                                                                                                                                                                                    |
 | `activity_bump_ms`                 | integer                                                                        | false    |              | Activity bump ms allows optionally specifying the activity bump duration for all workspaces created from this template. Defaults to 1h but can be set to 0 to disable activity bumping.                                                                                                                                                                                            |
 | `allow_user_autostart`             | boolean                                                                        | false    |              |                                                                                                                                                                                                                                                                                                                                                                                    |
 | `allow_user_autostop`              | boolean                                                                        | false    |              |                                                                                                                                                                                                                                                                                                                                                                                    |
