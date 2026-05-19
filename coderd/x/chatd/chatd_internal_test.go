@@ -793,12 +793,14 @@ func TestRegenerateChatTitle_PersistsAndBroadcasts(t *testing.T) {
 	}
 
 	db.EXPECT().GetChatModelConfigByID(gomock.Any(), modelConfigID).Return(modelConfig, nil)
-	db.EXPECT().GetEnabledChatProviders(gomock.Any()).Return([]database.ChatProvider{{
-		Provider:             "openai",
-		CentralApiKeyEnabled: true,
-		APIKey:               "test-key",
-		BaseUrl:              serverURL,
+	providerID := uuid.New()
+	db.EXPECT().GetAIProviders(gomock.Any(), gomock.Any()).Return([]database.AIProvider{{
+		ID:      providerID,
+		Type:    database.AiProviderTypeOpenai,
+		Enabled: true,
+		BaseUrl: serverURL,
 	}}, nil)
+	db.EXPECT().GetAIProviderKeysByProviderIDs(gomock.Any(), []uuid.UUID{providerID}).Return([]database.AIProviderKey{{ProviderID: providerID, APIKey: "test-key"}}, nil)
 	db.EXPECT().GetChatUsageLimitConfig(gomock.Any()).Return(database.ChatUsageLimitConfig{}, sql.ErrNoRows)
 	db.EXPECT().GetChatMessagesByChatIDAscPaginated(
 		gomock.Any(),
@@ -957,12 +959,14 @@ func TestRegenerateChatTitle_PersistsAndBroadcasts_IdleChatReleasesManualLock(t 
 	}
 
 	db.EXPECT().GetChatModelConfigByID(gomock.Any(), modelConfigID).Return(modelConfig, nil)
-	db.EXPECT().GetEnabledChatProviders(gomock.Any()).Return([]database.ChatProvider{{
-		Provider:             "openai",
-		CentralApiKeyEnabled: true,
-		APIKey:               "test-key",
-		BaseUrl:              serverURL,
+	providerID := uuid.New()
+	db.EXPECT().GetAIProviders(gomock.Any(), gomock.Any()).Return([]database.AIProvider{{
+		ID:      providerID,
+		Type:    database.AiProviderTypeOpenai,
+		Enabled: true,
+		BaseUrl: serverURL,
 	}}, nil)
+	db.EXPECT().GetAIProviderKeysByProviderIDs(gomock.Any(), []uuid.UUID{providerID}).Return([]database.AIProviderKey{{ProviderID: providerID, APIKey: "test-key"}}, nil)
 	db.EXPECT().GetChatUsageLimitConfig(gomock.Any()).Return(database.ChatUsageLimitConfig{}, sql.ErrNoRows)
 	db.EXPECT().GetChatMessagesByChatIDAscPaginated(
 		gomock.Any(),
@@ -1106,11 +1110,13 @@ func TestResolveUserProviderAPIKeys_StripsDisabledFallbackKeys(t *testing.T) {
 		},
 	}
 
-	db.EXPECT().GetEnabledChatProviders(gomock.Any()).Return([]database.ChatProvider{{
-		Provider:                   "anthropic",
-		CentralApiKeyEnabled:       true,
-		AllowCentralApiKeyFallback: true,
+	providerID := uuid.New()
+	db.EXPECT().GetAIProviders(gomock.Any(), gomock.Any()).Return([]database.AIProvider{{
+		ID:      providerID,
+		Type:    database.AiProviderTypeAnthropic,
+		Enabled: true,
 	}}, nil)
+	db.EXPECT().GetAIProviderKeysByProviderIDs(gomock.Any(), []uuid.UUID{providerID}).Return(nil, nil)
 
 	keys, err := server.resolveUserProviderAPIKeys(ctx, ownerID, uuid.Nil)
 	require.NoError(t, err)
@@ -1181,10 +1187,13 @@ func TestResolveUserProviderAPIKeys_SkipsUserKeyLookupWhenNoProviderAllowsUserKe
 		},
 	}
 
-	db.EXPECT().GetEnabledChatProviders(gomock.Any()).Return([]database.ChatProvider{{
-		Provider:             "openai",
-		CentralApiKeyEnabled: true,
+	providerID := uuid.New()
+	db.EXPECT().GetAIProviders(gomock.Any(), gomock.Any()).Return([]database.AIProvider{{
+		ID:      providerID,
+		Type:    database.AiProviderTypeOpenai,
+		Enabled: true,
 	}}, nil)
+	db.EXPECT().GetAIProviderKeysByProviderIDs(gomock.Any(), []uuid.UUID{providerID}).Return(nil, nil)
 
 	keys, err := server.resolveUserProviderAPIKeys(ctx, ownerID, uuid.Nil)
 	require.NoError(t, err)
@@ -3576,7 +3585,7 @@ func TestProcessChat_IgnoresStaleControlNotification(t *testing.T) {
 	db.EXPECT().GetChatModelConfigByID(gomock.Any(), gomock.Any()).Return(
 		database.ChatModelConfig{}, xerrors.New("no model configured"),
 	).AnyTimes()
-	db.EXPECT().GetEnabledChatProviders(gomock.Any()).Return(nil, nil).AnyTimes()
+	db.EXPECT().GetAIProviders(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 	db.EXPECT().GetEnabledChatModelConfigs(gomock.Any()).Return(nil, nil).AnyTimes()
 	db.EXPECT().GetChatUsageLimitConfig(gomock.Any()).Return(
 		database.ChatUsageLimitConfig{}, sql.ErrNoRows,
@@ -5350,7 +5359,7 @@ func TestAutoPromote_InsertFailureSkipsStatusUpdate(t *testing.T) {
 			return database.ChatModelConfig{}, chatloop.ErrInterrupted
 		},
 	).AnyTimes()
-	db.EXPECT().GetEnabledChatProviders(gomock.Any()).Return(nil, nil).AnyTimes()
+	db.EXPECT().GetAIProviders(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 	db.EXPECT().GetEnabledChatModelConfigs(gomock.Any()).Return(nil, nil).AnyTimes()
 	db.EXPECT().GetChatUsageLimitConfig(gomock.Any()).Return(
 		database.ChatUsageLimitConfig{}, sql.ErrNoRows,

@@ -348,13 +348,13 @@ func (p *Server) resolveAdvisorModelOverride(
 		return fallbackModel, fallbackCallConfig
 	}
 
-	// GetEnabledChatModelConfigByID joins on chat_providers.enabled = TRUE
+	// GetEnabledChatModelConfigByID joins on ai_providers.enabled = TRUE
 	// and chat_model_configs.enabled = TRUE, so it returns sql.ErrNoRows
 	// the moment an admin disables either the model config or its provider.
 	// Using the cached ModelConfigByID here would keep resolving an override
-	// whose provider was just disabled, and an env or central fallback key
-	// would let ModelFromConfig succeed, silently routing advisor prompts
-	// to a provider the admin expects to be off.
+	// whose provider was just disabled, and a fallback key would let
+	// ModelFromConfig succeed, silently routing advisor prompts to a provider
+	// the admin expects to be off.
 	overrideConfig, err := p.db.GetEnabledChatModelConfigByID(
 		ctx,
 		advisorCfg.ModelConfigID,
@@ -8278,12 +8278,16 @@ func (p *Server) resolveChatModel(
 }
 
 func (p *Server) aiProviderConfig(ctx context.Context, provider database.AIProvider) (chatprovider.ConfiguredProvider, error) {
-	if !provider.Enabled {
-		return chatprovider.ConfiguredProvider{}, xerrors.Errorf("AI provider %s is disabled", provider.ID)
-	}
 	keys, err := p.db.GetAIProviderKeysByProviderID(ctx, provider.ID)
 	if err != nil {
 		return chatprovider.ConfiguredProvider{}, xerrors.Errorf("get AI provider keys: %w", err)
+	}
+	return p.aiProviderConfigFromKeys(provider, keys)
+}
+
+func (p *Server) aiProviderConfigFromKeys(provider database.AIProvider, keys []database.AIProviderKey) (chatprovider.ConfiguredProvider, error) {
+	if !provider.Enabled {
+		return chatprovider.ConfiguredProvider{}, xerrors.Errorf("AI provider %s is disabled", provider.ID)
 	}
 	apiKey := ""
 	// GetAIProviderKeysByProviderID orders keys oldest first. chatd consumes
@@ -8303,6 +8307,45 @@ func (p *Server) aiProviderConfig(ctx context.Context, provider database.AIProvi
 		AllowUserAPIKey:            p.allowBYOK,
 		AllowCentralAPIKeyFallback: true,
 	}, nil
+}
+
+func (p *Server) aiProviderConfigs(ctx context.Context, providers []database.AIProvider) ([]chatprovider.ConfiguredProvider, error) {
+	providerIDs := make([]uuid.UUID, 0, len(providers))
+	for _, provider := range providers {
+		providerIDs = append(providerIDs, provider.ID)
+	}
+	keys, err := p.db.GetAIProviderKeysByProviderIDs(ctx, providerIDs)
+	if err != nil {
+		return nil, xerrors.Errorf("get AI provider keys: %w", err)
+	}
+	keysByProviderID := make(map[uuid.UUID][]database.AIProviderKey, len(providers))
+	for _, key := range keys {
+		keysByProviderID[key.ProviderID] = append(keysByProviderID[key.ProviderID], key)
+	}
+	configuredProviders := make([]chatprovider.ConfiguredProvider, 0, len(providers))
+	for _, provider := range providers {
+		configuredProvider, err := p.aiProviderConfigFromKeys(provider, keysByProviderID[provider.ID])
+		if err != nil {
+			return nil, err
+		}
+		configuredProviders = append(configuredProviders, configuredProvider)
+	}
+	return configuredProviders, nil
+}
+
+func ensureUniqueConfiguredProviderTypes(providers []chatprovider.ConfiguredProvider) error {
+	seen := make(map[string]uuid.UUID, len(providers))
+	for _, provider := range providers {
+		normalizedProvider := chatprovider.NormalizeProvider(provider.Provider)
+		if normalizedProvider == "" {
+			continue
+		}
+		if existingProviderID, ok := seen[normalizedProvider]; ok && existingProviderID != provider.ProviderID {
+			return xerrors.Errorf("multiple enabled AI providers use provider type %q; select an AI provider by ID", normalizedProvider)
+		}
+		seen[normalizedProvider] = provider.ProviderID
+	}
+	return nil
 }
 
 func (p *Server) resolveUserProviderAPIKeysForProvider(
@@ -8374,9 +8417,6 @@ func (p *Server) resolveUserProviderAPIKeys(
 	ownerID uuid.UUID,
 	selectedAIProviderID uuid.UUID,
 ) (chatprovider.ProviderAPIKeys, error) {
-	var configuredProviders []chatprovider.ConfiguredProvider
-	userKeys := []chatprovider.UserProviderKey{}
-
 	if selectedAIProviderID != uuid.Nil {
 		provider, err := p.db.GetAIProviderByID(ctx, selectedAIProviderID)
 		if err != nil {
@@ -8384,48 +8424,35 @@ func (p *Server) resolveUserProviderAPIKeys(
 		}
 		return p.resolveUserProviderAPIKeysForProvider(ctx, ownerID, provider)
 	}
+
 	providers, err := p.configCache.EnabledProviders(ctx)
 	if err != nil {
 		return chatprovider.ProviderAPIKeys{}, xerrors.Errorf(
-			"get enabled chat providers: %w",
+			"get enabled AI providers: %w",
 			err,
 		)
 	}
-	configuredProviders = make(
-		[]chatprovider.ConfiguredProvider, 0, len(providers),
-	)
-	for _, provider := range providers {
-		configuredProviders = append(
-			configuredProviders, chatprovider.ConfiguredProvider{
-				ProviderID:                 provider.ID,
-				Provider:                   provider.Provider,
-				APIKey:                     provider.APIKey,
-				BaseURL:                    provider.BaseUrl,
-				CentralAPIKeyEnabled:       provider.CentralApiKeyEnabled,
-				AllowUserAPIKey:            provider.AllowUserApiKey,
-				AllowCentralAPIKeyFallback: provider.AllowCentralApiKeyFallback,
-			},
-		)
+	configuredProviders, err := p.aiProviderConfigs(ctx, providers)
+	if err != nil {
+		return chatprovider.ProviderAPIKeys{}, err
 	}
-	allowAnyUserAPIKey := false
-	for _, provider := range configuredProviders {
-		if provider.AllowUserAPIKey {
-			allowAnyUserAPIKey = true
-			break
-		}
+	if err := ensureUniqueConfiguredProviderTypes(configuredProviders); err != nil {
+		return chatprovider.ProviderAPIKeys{}, err
 	}
-	if allowAnyUserAPIKey {
-		userKeyRows, err := p.db.GetUserChatProviderKeys(ctx, ownerID)
+
+	userKeys := []chatprovider.UserProviderKey{}
+	if p.allowBYOK {
+		userKeyRows, err := p.db.GetUserAIProviderKeysByUserID(ctx, ownerID)
 		if err != nil {
 			return chatprovider.ProviderAPIKeys{}, xerrors.Errorf(
-				"get user chat provider keys: %w",
+				"get user AI provider keys: %w",
 				err,
 			)
 		}
 		userKeys = make([]chatprovider.UserProviderKey, 0, len(userKeyRows))
 		for _, userKey := range userKeyRows {
 			userKeys = append(userKeys, chatprovider.UserProviderKey{
-				ChatProviderID: userKey.ChatProviderID,
+				ChatProviderID: userKey.AIProviderID,
 				APIKey:         userKey.APIKey,
 			})
 		}

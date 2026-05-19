@@ -59,10 +59,12 @@ func CreateOpenAICompatChatModelConfig(
 	t.Helper()
 
 	ctx := testutil.Context(t, testutil.WaitLong)
-	_, err := client.CreateChatProvider(ctx, codersdk.CreateChatProviderConfigRequest{
-		Provider: TestChatProviderOpenAICompat,
-		APIKey:   TestChatProviderAPIKey,
-		BaseURL:  baseURL,
+	provider, err := client.CreateAIProvider(ctx, codersdk.CreateAIProviderRequest{
+		Type:    codersdk.AIProviderType(TestChatProviderOpenAICompat),
+		Name:    "test-" + uuid.NewString(),
+		BaseURL: baseURL,
+		Enabled: true,
+		APIKeys: []string{TestChatProviderAPIKey},
 	})
 	require.NoError(t, err)
 
@@ -70,6 +72,7 @@ func CreateOpenAICompatChatModelConfig(
 	isDefault := true
 	modelConfig, err := client.CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
 		Provider:     TestChatProviderOpenAICompat,
+		AIProviderID: &provider.ID,
 		Model:        TestChatModelOpenAICompat,
 		ContextLimit: &contextLimit,
 		IsDefault:    &isDefault,

@@ -407,11 +407,8 @@ export type DeploymentConfig = Readonly<{
 	options: TypesGen.SerpentOption[];
 }>;
 
-const chatProviderConfigsPath = "/api/experimental/chats/providers";
 const aiProviderConfigsPath = "/api/v2/ai/providers";
 const chatModelConfigsPath = "/api/experimental/chats/model-configs";
-const userChatProviderConfigsPath =
-	"/api/experimental/chats/user-provider-configs";
 const userAIProviderKeysPath = "/api/experimental/chats/user-ai-provider-keys";
 const mcpServerConfigsPath = "/api/experimental/mcp/servers";
 
@@ -3662,42 +3659,6 @@ class ExperimentalApiMethods {
 		);
 	};
 
-	getChatProviderConfigs = async (): Promise<TypesGen.ChatProviderConfig[]> => {
-		const response = await this.axios.get<TypesGen.ChatProviderConfig[]>(
-			chatProviderConfigsPath,
-		);
-		return response.data;
-	};
-
-	createChatProviderConfig = async (
-		req: TypesGen.CreateChatProviderConfigRequest,
-	): Promise<TypesGen.ChatProviderConfig> => {
-		const response = await this.axios.post<TypesGen.ChatProviderConfig>(
-			chatProviderConfigsPath,
-			req,
-		);
-		return response.data;
-	};
-
-	updateChatProviderConfig = async (
-		providerConfigId: string,
-		req: TypesGen.UpdateChatProviderConfigRequest,
-	): Promise<TypesGen.ChatProviderConfig> => {
-		const response = await this.axios.patch<TypesGen.ChatProviderConfig>(
-			`${chatProviderConfigsPath}/${encodeURIComponent(providerConfigId)}`,
-			req,
-		);
-		return response.data;
-	};
-
-	deleteChatProviderConfig = async (
-		providerConfigId: string,
-	): Promise<void> => {
-		await this.axios.delete(
-			`${chatProviderConfigsPath}/${encodeURIComponent(providerConfigId)}`,
-		);
-	};
-
 	getChatModelConfigs = async (): Promise<TypesGen.ChatModelConfig[]> => {
 		const response =
 			await this.axios.get<TypesGen.ChatModelConfig[]>(chatModelConfigsPath);
@@ -3728,34 +3689,6 @@ class ExperimentalApiMethods {
 	deleteChatModelConfig = async (modelConfigId: string): Promise<void> => {
 		await this.axios.delete(
 			`${chatModelConfigsPath}/${encodeURIComponent(modelConfigId)}`,
-		);
-	};
-
-	getUserChatProviderConfigs = async (): Promise<
-		TypesGen.UserChatProviderConfig[]
-	> => {
-		const response = await this.axios.get<TypesGen.UserChatProviderConfig[]>(
-			userChatProviderConfigsPath,
-		);
-		return response.data;
-	};
-
-	upsertUserChatProviderKey = async (
-		providerConfigId: string,
-		req: TypesGen.CreateUserChatProviderKeyRequest,
-	): Promise<TypesGen.UserChatProviderConfig> => {
-		const response = await this.axios.put<TypesGen.UserChatProviderConfig>(
-			`${userChatProviderConfigsPath}/${encodeURIComponent(providerConfigId)}`,
-			req,
-		);
-		return response.data;
-	};
-
-	deleteUserChatProviderKey = async (
-		providerConfigId: string,
-	): Promise<void> => {
-		await this.axios.delete(
-			`${userChatProviderConfigsPath}/${encodeURIComponent(providerConfigId)}`,
 		);
 	};
 

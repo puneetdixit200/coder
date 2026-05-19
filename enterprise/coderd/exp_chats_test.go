@@ -24,6 +24,26 @@ import (
 	"github.com/coder/websocket"
 )
 
+func createAIProviderForEnterpriseChatTest(
+	ctx context.Context,
+	t testing.TB,
+	client *codersdk.ExperimentalClient,
+	baseURL string,
+) codersdk.AIProvider {
+	t.Helper()
+
+	provider, err := client.CreateAIProvider(ctx, codersdk.CreateAIProviderRequest{
+		Type:        codersdk.AIProviderTypeOpenAI,
+		Name:        "test-openai-" + uuid.NewString(),
+		DisplayName: "OpenAI",
+		BaseURL:     baseURL,
+		Enabled:     true,
+		APIKeys:     []string{"test"},
+	})
+	require.NoError(t, err)
+	return provider
+}
+
 func TestChatStreamRelay(t *testing.T) {
 	t.Parallel()
 
@@ -74,18 +94,12 @@ func TestChatStreamRelay(t *testing.T) {
 			return chattest.OpenAINonStreamingResponse("ok")
 		})
 
-		//nolint:gocritic // Test uses owner client to configure chat providers.
-		provider, err := codersdk.NewExperimentalClient(firstClient).CreateChatProvider(ctx, codersdk.CreateChatProviderConfigRequest{
-			Provider:    "openai",
-			DisplayName: "OpenAI",
-			APIKey:      "test",
-			BaseURL:     openai,
-		})
-		require.NoError(t, err)
-		require.Equal(t, codersdk.ChatProviderConfigSourceDatabase, provider.Source)
+		expClient := codersdk.NewExperimentalClient(firstClient)
+		provider := createAIProviderForEnterpriseChatTest(ctx, t, expClient, openai)
 
-		model, err := codersdk.NewExperimentalClient(firstClient).CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
-			Provider:             provider.Provider,
+		model, err := expClient.CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
+			Provider:             string(provider.Type),
+			AIProviderID:         &provider.ID,
 			Model:                "gpt-4",
 			DisplayName:          "GPT-4",
 			ContextLimit:         &[]int64{1000}[0],
@@ -264,17 +278,12 @@ func TestChatStreamRelay(t *testing.T) {
 			return chattest.OpenAINonStreamingResponse("ok")
 		})
 
-		//nolint:gocritic // Test uses owner client to configure chat providers.
-		provider, err := codersdk.NewExperimentalClient(firstClient).CreateChatProvider(ctx, codersdk.CreateChatProviderConfigRequest{
-			Provider:    "openai",
-			DisplayName: "OpenAI",
-			APIKey:      "test",
-			BaseURL:     openai,
-		})
-		require.NoError(t, err)
+		expClient := codersdk.NewExperimentalClient(firstClient)
+		provider := createAIProviderForEnterpriseChatTest(ctx, t, expClient, openai)
 
-		model, err := codersdk.NewExperimentalClient(firstClient).CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
-			Provider:             provider.Provider,
+		model, err := expClient.CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
+			Provider:             string(provider.Type),
+			AIProviderID:         &provider.ID,
 			Model:                "gpt-4",
 			DisplayName:          "GPT-4",
 			ContextLimit:         &[]int64{1000}[0],
@@ -435,17 +444,12 @@ func TestChatStreamRelay(t *testing.T) {
 			return chattest.OpenAINonStreamingResponse("ok")
 		})
 
-		//nolint:gocritic // Test uses owner client to configure providers.
-		provider, err := codersdk.NewExperimentalClient(firstClient).CreateChatProvider(ctx, codersdk.CreateChatProviderConfigRequest{
-			Provider:    "openai",
-			DisplayName: "OpenAI",
-			APIKey:      "test",
-			BaseURL:     openai,
-		})
-		require.NoError(t, err)
+		expClient := codersdk.NewExperimentalClient(firstClient)
+		provider := createAIProviderForEnterpriseChatTest(ctx, t, expClient, openai)
 
-		model, err := codersdk.NewExperimentalClient(firstClient).CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
-			Provider:             provider.Provider,
+		model, err := expClient.CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
+			Provider:             string(provider.Type),
+			AIProviderID:         &provider.ID,
 			Model:                "gpt-4",
 			DisplayName:          "GPT-4",
 			ContextLimit:         &[]int64{1000}[0],
@@ -607,17 +611,12 @@ func TestChatStreamRelay(t *testing.T) {
 			return chattest.OpenAINonStreamingResponse("ok")
 		})
 
-		//nolint:gocritic // Test uses owner client to configure providers.
-		provider, err := codersdk.NewExperimentalClient(firstClient).CreateChatProvider(ctx, codersdk.CreateChatProviderConfigRequest{
-			Provider:    "openai",
-			DisplayName: "OpenAI",
-			APIKey:      "test",
-			BaseURL:     openai,
-		})
-		require.NoError(t, err)
+		expClient := codersdk.NewExperimentalClient(firstClient)
+		provider := createAIProviderForEnterpriseChatTest(ctx, t, expClient, openai)
 
-		model, err := codersdk.NewExperimentalClient(firstClient).CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
-			Provider:             provider.Provider,
+		model, err := expClient.CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
+			Provider:             string(provider.Type),
+			AIProviderID:         &provider.ID,
 			Model:                "gpt-4",
 			DisplayName:          "GPT-4",
 			ContextLimit:         &[]int64{1000}[0],
@@ -754,17 +753,12 @@ func TestChatStreamRelay(t *testing.T) {
 			return chattest.OpenAINonStreamingResponse("ok")
 		})
 
-		//nolint:gocritic // Test uses owner client to configure chat providers.
-		provider, err := codersdk.NewExperimentalClient(firstClient).CreateChatProvider(ctx, codersdk.CreateChatProviderConfigRequest{
-			Provider:    "openai",
-			DisplayName: "OpenAI",
-			APIKey:      "test",
-			BaseURL:     openai,
-		})
-		require.NoError(t, err)
+		expClient := codersdk.NewExperimentalClient(firstClient)
+		provider := createAIProviderForEnterpriseChatTest(ctx, t, expClient, openai)
 
-		model, err := codersdk.NewExperimentalClient(firstClient).CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
-			Provider:             provider.Provider,
+		model, err := expClient.CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
+			Provider:             string(provider.Type),
+			AIProviderID:         &provider.ID,
 			Model:                "gpt-4",
 			DisplayName:          "GPT-4",
 			ContextLimit:         &[]int64{1000}[0],
@@ -954,17 +948,7 @@ func TestChatModelConfigDefault(t *testing.T) {
 	client, _ := coderdenttest.New(t, nil)
 	expClient := codersdk.NewExperimentalClient(client)
 
-	//nolint:gocritic // Test uses owner client to configure chat providers.
-	provider, err := expClient.CreateChatProvider(
-		ctx,
-		codersdk.CreateChatProviderConfigRequest{
-			Provider:    "openai",
-			DisplayName: "OpenAI",
-			APIKey:      "test",
-			BaseURL:     "https://example.com",
-		},
-	)
-	require.NoError(t, err)
+	provider := createAIProviderForEnterpriseChatTest(ctx, t, expClient, "https://example.com")
 
 	contextLimit := int64(1000)
 	compressionThreshold := int32(70)
@@ -974,7 +958,8 @@ func TestChatModelConfigDefault(t *testing.T) {
 	firstModel, err := expClient.CreateChatModelConfig(
 		ctx,
 		codersdk.CreateChatModelConfigRequest{
-			Provider:             provider.Provider,
+			Provider:             string(provider.Type),
+			AIProviderID:         &provider.ID,
 			Model:                "gpt-5-a",
 			DisplayName:          "GPT 5 A",
 			IsDefault:            &trueValue,
@@ -988,7 +973,8 @@ func TestChatModelConfigDefault(t *testing.T) {
 	secondModel, err := expClient.CreateChatModelConfig(
 		ctx,
 		codersdk.CreateChatModelConfigRequest{
-			Provider:             provider.Provider,
+			Provider:             string(provider.Type),
+			AIProviderID:         &provider.ID,
 			Model:                "gpt-5-b",
 			DisplayName:          "GPT 5 B",
 			IsDefault:            &trueValue,
@@ -1115,16 +1101,11 @@ func TestCreateChatNonDefaultOrg(t *testing.T) {
 	})
 	expClient := codersdk.NewExperimentalClient(client)
 
-	// Set up a chat provider and model config.
-	provider, err := expClient.CreateChatProvider(ctx, codersdk.CreateChatProviderConfigRequest{
-		Provider:    "openai",
-		DisplayName: "OpenAI",
-		APIKey:      "test-key",
-		BaseURL:     "https://example.com",
-	})
-	require.NoError(t, err)
-	_, err = expClient.CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
-		Provider:             provider.Provider,
+	// Set up an AI provider and model config.
+	provider := createAIProviderForEnterpriseChatTest(ctx, t, expClient, "https://example.com")
+	_, err := expClient.CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
+		Provider:             string(provider.Type),
+		AIProviderID:         &provider.ID,
 		Model:                "gpt-4o-mini",
 		DisplayName:          "Test Model",
 		IsDefault:            ptr.Ref(true),
@@ -1191,16 +1172,11 @@ func TestListChats_OrgAdminOnlySeesOwnChats(t *testing.T) {
 	})
 	expClient := codersdk.NewExperimentalClient(client)
 
-	// Set up a chat provider and model config.
-	provider, err := expClient.CreateChatProvider(ctx, codersdk.CreateChatProviderConfigRequest{
-		Provider:    "openai",
-		DisplayName: "OpenAI",
-		APIKey:      "test-key",
-		BaseURL:     "https://example.com",
-	})
-	require.NoError(t, err)
-	_, err = expClient.CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
-		Provider:             provider.Provider,
+	// Set up an AI provider and model config.
+	provider := createAIProviderForEnterpriseChatTest(ctx, t, expClient, "https://example.com")
+	_, err := expClient.CreateChatModelConfig(ctx, codersdk.CreateChatModelConfigRequest{
+		Provider:             string(provider.Type),
+		AIProviderID:         &provider.ID,
 		Model:                "gpt-4o-mini",
 		DisplayName:          "Test Model",
 		IsDefault:            ptr.Ref(true),
