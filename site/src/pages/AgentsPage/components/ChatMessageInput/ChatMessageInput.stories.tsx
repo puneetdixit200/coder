@@ -135,6 +135,7 @@ export const EnterSelectsSkill: Story = {
 		await waitFor(() => {
 			expect(editor.textContent).toBe("/reviewer");
 		});
+		await expectNoVisibleText("Review changed files and suggest fixes.");
 	},
 };
 
@@ -157,6 +158,7 @@ export const TabSelectsSkill: Story = {
 		await waitFor(() => {
 			expect(editor.textContent).toBe("/reviewer");
 		});
+		await expectNoVisibleText("Review changed files and suggest fixes.");
 	},
 };
 
@@ -167,6 +169,7 @@ export const ClickSelectsSkill: Story = {
 		await waitFor(() => {
 			expect(editor.textContent).toBe("/reviewer");
 		});
+		await expectNoVisibleText("Review changed files and suggest fixes.");
 	},
 };
 

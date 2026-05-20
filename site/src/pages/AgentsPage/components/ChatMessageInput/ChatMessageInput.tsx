@@ -518,6 +518,20 @@ const EditableStatePlugin: FC<{ disabled: boolean }> =
 		return null;
 	};
 
+type SkillsTriggerLocation = Pick<
+	ActiveSkillsTrigger,
+	"nodeKey" | "slashOffset"
+>;
+
+const isSameSkillsTriggerLocation = (
+	a: SkillsTriggerLocation | null,
+	b: SkillsTriggerLocation | null,
+): boolean => {
+	return Boolean(
+		a && b && a.nodeKey === b.nodeKey && a.slashOffset === b.slashOffset,
+	);
+};
+
 const isSameSkillsTrigger = (
 	a: ActiveSkillsTrigger | null,
 	b: ActiveSkillsTrigger | null,
@@ -579,6 +593,7 @@ const ChatMessageInput = ({
 	const pendingReplacementRef = useRef<string | null>(null);
 	const [skillsTrigger, setSkillsTrigger] =
 		useState<ActiveSkillsTrigger | null>(null);
+	const suppressedSkillsTriggerRef = useRef<SkillsTriggerLocation | null>(null);
 	const [skillsMenuSelectedIndex, setSkillsMenuSelectedIndex] = useState(0);
 	const skillsMenuOpen = Boolean(skillsTrigger);
 	const skillsQuery = useQuery({
@@ -595,6 +610,14 @@ const ChatMessageInput = ({
 			: Math.min(skillsMenuSelectedIndex, filteredPersonalSkills.length - 1);
 
 	const handleSkillsTriggerChange = (trigger: ActiveSkillsTrigger | null) => {
+		if (
+			trigger &&
+			isSameSkillsTriggerLocation(trigger, suppressedSkillsTriggerRef.current)
+		) {
+			suppressedSkillsTriggerRef.current = null;
+			return;
+		}
+		suppressedSkillsTriggerRef.current = null;
 		if (isSameSkillsTrigger(trigger, skillsTrigger)) {
 			return;
 		}
@@ -612,6 +635,8 @@ const ChatMessageInput = ({
 			setSkillsMenuSelectedIndex(0);
 			return;
 		}
+
+		suppressedSkillsTriggerRef.current = trigger;
 
 		editor.update(() => {
 			const selection = $getSelection();

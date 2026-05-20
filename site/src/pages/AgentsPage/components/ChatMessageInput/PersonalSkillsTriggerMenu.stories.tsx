@@ -121,6 +121,18 @@ export const Empty: Story = {
 	},
 };
 
+export const FilteredEmpty: Story = {
+	args: {
+		query: "xyz",
+		skills: [],
+	},
+	play: async () => {
+		expect(
+			await findVisibleText("No personal skills match that query."),
+		).toBeDefined();
+	},
+};
+
 export const Filtered: Story = {
 	args: {
 		query: "rev",
