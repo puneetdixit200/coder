@@ -415,6 +415,7 @@ export const BlockList: FC<{
 										: undefined
 								}
 								modelIntent={tool.modelIntent}
+								parsedCommands={tool.parsedCommands}
 							/>
 						);
 					}
@@ -472,6 +473,7 @@ export const BlockList: FC<{
 							: undefined
 					}
 					modelIntent={tool.modelIntent}
+					parsedCommands={tool.parsedCommands}
 				/>
 			))}
 		</>

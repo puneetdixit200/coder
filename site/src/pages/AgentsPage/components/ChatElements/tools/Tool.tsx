@@ -93,6 +93,8 @@ interface ToolProps extends Omit<ComponentPropsWithRef<"div">, "children"> {
 	previousResponseText?: string;
 	/** Human-readable intent extracted from the model's tool-call args. */
 	modelIntent?: string;
+	/** Per-command parsed labels from a chained shell program. */
+	parsedCommands?: readonly string[][];
 	shellToolDisplayMode?: TypesGen.AgentDisplayMode;
 	codeDiffDisplayMode?: TypesGen.AgentDisplayMode;
 }
@@ -118,6 +120,7 @@ type ToolRendererProps = {
 	mcpServerConfigId?: string;
 	mcpServers?: readonly TypesGen.MCPServerConfig[];
 	modelIntent?: string;
+	parsedCommands?: readonly string[][];
 	shellToolDisplayMode?: TypesGen.AgentDisplayMode;
 	codeDiffDisplayMode?: TypesGen.AgentDisplayMode;
 };
@@ -269,6 +272,7 @@ const ExecuteRenderer: FC<ToolRendererProps> = ({
 	isError,
 	killedBySignal,
 	modelIntent,
+	parsedCommands,
 	shellToolDisplayMode,
 }) => {
 	const data = getExecuteRenderData(args, result);
@@ -297,6 +301,7 @@ const ExecuteRenderer: FC<ToolRendererProps> = ({
 			isBackgrounded={data.isBackgrounded}
 			killedBySignal={killedBySignal}
 			modelIntent={modelIntent}
+			parsedCommands={parsedCommands}
 			shellToolDisplayMode={shellToolDisplayMode}
 		/>
 	);
@@ -1087,7 +1092,7 @@ export const Tool = memo(
 		isLatestAskUserQuestion,
 		previousResponseText,
 		modelIntent,
-		shellToolDisplayMode,
+		parsedCommands,
 		codeDiffDisplayMode,
 		ref,
 		...props
@@ -1138,7 +1143,7 @@ export const Tool = memo(
 					isLatestAskUserQuestion={isLatestAskUserQuestion}
 					previousResponseText={previousResponseText}
 					modelIntent={modelIntent}
-					shellToolDisplayMode={shellToolDisplayMode}
+					parsedCommands={parsedCommands}
 					codeDiffDisplayMode={codeDiffDisplayMode}
 				/>
 			</div>
