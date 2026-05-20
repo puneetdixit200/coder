@@ -6404,19 +6404,24 @@ func (s *MethodTestSuite) TestAIBridge() {
 
 	s.Run("UpsertUserAIBudgetOverride", s.Mocked(func(dbm *dbmock.MockStore, faker *gofakeit.Faker, check *expects) {
 		u := testutil.Fake(s.T(), faker, database.User{})
-		o := testutil.Fake(s.T(), faker, database.UserAiBudgetOverride{UserID: u.ID})
-		arg := database.UpsertUserAIBudgetOverrideParams{UserID: u.ID, GroupID: o.GroupID, SpendLimitMicros: o.SpendLimitMicros}
+		g := testutil.Fake(s.T(), faker, database.Group{})
+		o := testutil.Fake(s.T(), faker, database.UserAiBudgetOverride{UserID: u.ID, GroupID: g.ID})
+		arg := database.UpsertUserAIBudgetOverrideParams{UserID: u.ID, GroupID: g.ID, SpendLimitMicros: o.SpendLimitMicros}
 		dbm.EXPECT().GetUserByID(gomock.Any(), u.ID).Return(u, nil).AnyTimes()
+		dbm.EXPECT().GetGroupByID(gomock.Any(), g.ID).Return(g, nil).AnyTimes()
 		dbm.EXPECT().UpsertUserAIBudgetOverride(gomock.Any(), arg).Return(o, nil).AnyTimes()
-		check.Args(arg).Asserts(u, policy.ActionUpdate).Returns(o)
+		check.Args(arg).Asserts(u, policy.ActionUpdate, g, policy.ActionUpdate).Returns(o)
 	}))
 
 	s.Run("DeleteUserAIBudgetOverride", s.Mocked(func(dbm *dbmock.MockStore, faker *gofakeit.Faker, check *expects) {
 		u := testutil.Fake(s.T(), faker, database.User{})
-		o := testutil.Fake(s.T(), faker, database.UserAiBudgetOverride{UserID: u.ID})
+		g := testutil.Fake(s.T(), faker, database.Group{})
+		o := testutil.Fake(s.T(), faker, database.UserAiBudgetOverride{UserID: u.ID, GroupID: g.ID})
 		dbm.EXPECT().GetUserByID(gomock.Any(), u.ID).Return(u, nil).AnyTimes()
+		dbm.EXPECT().GetUserAIBudgetOverride(gomock.Any(), u.ID).Return(o, nil).AnyTimes()
+		dbm.EXPECT().GetGroupByID(gomock.Any(), g.ID).Return(g, nil).AnyTimes()
 		dbm.EXPECT().DeleteUserAIBudgetOverride(gomock.Any(), u.ID).Return(o, nil).AnyTimes()
-		check.Args(u.ID).Asserts(u, policy.ActionUpdate).Returns(o)
+		check.Args(u.ID).Asserts(u, policy.ActionUpdate, g, policy.ActionUpdate).Returns(o)
 	}))
 
 	s.Run("GetGroupMember", s.Mocked(func(dbm *dbmock.MockStore, faker *gofakeit.Faker, check *expects) {
