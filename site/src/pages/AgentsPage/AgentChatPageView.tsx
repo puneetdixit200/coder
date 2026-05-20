@@ -29,7 +29,7 @@ import {
 import type { useChatStore } from "./components/ChatConversation/chatStore";
 import type { ModelSelectorOption } from "./components/ChatElements";
 import { DesktopPanelContext } from "./components/ChatElements/tools/DesktopPanelContext";
-import type { PendingAttachment } from "./components/ChatPageContent";
+import type { SendChatMessageOptions } from "./components/ChatPageContent";
 import { ChatPageInput, ChatPageTimeline } from "./components/ChatPageContent";
 import { ChatScrollContainer } from "./components/ChatScrollContainer";
 import { ChatSharingPopoverContent } from "./components/ChatSharingPopover";
@@ -73,10 +73,7 @@ interface EditingState {
 		fileBlocks: readonly ChatMessagePart[],
 	) => void;
 	handleCancelQueueEdit: () => void;
-	handleSendFromInput: (
-		message: string,
-		attachments?: readonly PendingAttachment[],
-	) => void;
+	handleSendFromInput: (options: SendChatMessageOptions) => void;
 	handleContentChange: (
 		content: string,
 		serializedEditorState: string,
@@ -91,6 +88,7 @@ interface AgentChatPageViewProps {
 	organizationId: string | undefined;
 	chatTitle: string | undefined;
 	parentChat: TypesGen.Chat | undefined;
+	chatFiles?: readonly TypesGen.ChatFileMetadata[];
 	persistedError: ChatDetailError | undefined;
 	isArchived: boolean;
 	chatOwner: Pick<TypesGen.MinimalUser, "name" | "username"> | undefined;
@@ -198,6 +196,7 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 	organizationId,
 	chatTitle,
 	parentChat,
+	chatFiles,
 	persistedError,
 	isArchived,
 	chatOwner,
@@ -534,6 +533,7 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 								<ChatPageTimeline
 									chatID={agentId}
 									store={store}
+									files={chatFiles}
 									persistedError={persistedError}
 									onEditUserMessage={editing.handleEditUserMessage}
 									editingMessageId={editing.editingMessageId}

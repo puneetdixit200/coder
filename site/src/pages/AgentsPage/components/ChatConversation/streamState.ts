@@ -200,6 +200,7 @@ export const applyMessagePartToStreamState = (
 		// skill parts are metadata-only; no streaming render
 		// needed.
 		case "skill":
+		// workspace-file parts only appear in persisted user messages.
 		case "workspace-file-reference":
 			return prev;
 		default: {

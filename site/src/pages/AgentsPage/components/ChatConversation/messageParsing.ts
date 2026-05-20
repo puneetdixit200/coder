@@ -128,8 +128,32 @@ export const mergeTools = (
 	return merged;
 };
 
+const buildFileSizeByID = (
+	files: readonly TypesGen.ChatFileMetadata[] | undefined,
+): ReadonlyMap<string, number> => {
+	const sizes = new Map<string, number>();
+	for (const file of files ?? []) {
+		if (typeof file.size === "number") {
+			sizes.set(file.id, file.size);
+		}
+	}
+	return sizes;
+};
+
+const withFileMetadataSize = (
+	part: TypesGen.ChatFilePart,
+	fileSizeByID?: ReadonlyMap<string, number>,
+): TypesGen.ChatFilePart => {
+	if (typeof part.size === "number" || !part.file_id) {
+		return part;
+	}
+	const size = fileSizeByID?.get(part.file_id);
+	return typeof size === "number" ? { ...part, size } : part;
+};
+
 export const parseMessageContent = (
 	content: readonly TypesGen.ChatMessagePart[] | undefined,
+	fileSizeByID?: ReadonlyMap<string, number>,
 ): ParsedMessageContent => {
 	if (!content || content.length === 0) {
 		return emptyParsedMessageContent();
@@ -189,8 +213,15 @@ export const parseMessageContent = (
 			}
 			case "file": {
 				if (part.data || part.file_id) {
-					parsed.blocks = [...parsed.blocks, part];
+					parsed.blocks = [
+						...parsed.blocks,
+						withFileMetadataSize(part, fileSizeByID),
+					];
 				}
+				break;
+			}
+			case "workspace-file-reference": {
+				parsed.blocks = [...parsed.blocks, part];
 				break;
 			}
 			case "source": {
@@ -216,9 +247,6 @@ export const parseMessageContent = (
 						});
 					}
 				}
-				break;
-			}
-			case "workspace-file-reference": {
 				break;
 			}
 			case "context-file": {
@@ -250,8 +278,9 @@ const isEditableAttachmentMediaType = (mediaType: string): boolean =>
 
 const isEditableUserMessageFileBlock = (
 	block: RenderBlock,
-): block is TypesGen.ChatFilePart =>
-	block.type === "file" && isEditableAttachmentMediaType(block.media_type);
+): block is TypesGen.ChatFilePart | TypesGen.ChatWorkspaceFileReferencePart =>
+	(block.type === "file" && isEditableAttachmentMediaType(block.media_type)) ||
+	block.type === "workspace-file-reference";
 
 export const getEditableUserMessagePayload = (
 	message: TypesGen.ChatMessage,
@@ -275,10 +304,12 @@ export const getEditableUserMessagePayload = (
 
 export const parseMessagesWithMergedTools = (
 	messages: readonly TypesGen.ChatMessage[],
+	files?: readonly TypesGen.ChatFileMetadata[],
 ): ParsedMessageEntry[] => {
+	const fileSizeByID = buildFileSizeByID(files);
 	const rawParsed = messages.map((message) => ({
 		message,
-		parsed: parseMessageContent(message.content),
+		parsed: parseMessageContent(message.content, fileSizeByID),
 	}));
 
 	const globalToolResults = new Map<string, ParsedToolResult>();

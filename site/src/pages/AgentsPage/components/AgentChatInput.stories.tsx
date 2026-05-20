@@ -5,6 +5,7 @@ import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import type * as TypesGen from "#/api/typesGenerated";
 import { MockWorkspace, MockWorkspaceAgent } from "#/testHelpers/entities";
 import { withProxyProvider } from "#/testHelpers/storybook";
+import type { WorkspaceUploadState } from "../hooks/useWorkspaceFileUploads";
 import {
 	AgentChatInput,
 	type AgentContextUsage,
@@ -486,6 +487,101 @@ export const WithAttachmentError: Story = {
 			initialValue: "Upload had an error",
 		};
 	})(),
+};
+
+/** Workspace file uploads share the attachment tile without preview content. */
+export const WithWorkspaceUpload: Story = {
+	args: (() => {
+		const file = createMockFile("archive.zip", "application/zip");
+		return {
+			workspaceUploadProps: {
+				files: [file],
+				states: new Map<File, WorkspaceUploadState>([
+					[
+						file,
+						{
+							status: "uploaded",
+							path: "/home/coder/.coder/chats/abcd1234/files/archive.zip",
+							name: "archive.zip",
+							size: 1024 * 512,
+							mediaType: "application/zip",
+						},
+					],
+				]),
+				onAttach: fn(),
+				onRemove: fn(),
+			},
+			initialValue: "unzip this archive please",
+		};
+	})(),
+	play: async ({ args, canvasElement }) => {
+		const canvas = within(canvasElement);
+		expect(await canvas.findByText("archive.zip")).toBeInTheDocument();
+		expect(canvas.getByText(/512 KiB \u00b7 workspace/)).toBeInTheDocument();
+		const removeButton = canvas.getByRole("button", {
+			name: "Remove archive.zip",
+		});
+		await userEvent.click(removeButton);
+		expect(args.workspaceUploadProps?.onRemove).toHaveBeenCalledTimes(1);
+	},
+};
+
+export const WithUploadingWorkspaceFile: Story = {
+	args: (() => {
+		const file = createMockFile("video.mp4", "video/mp4");
+		return {
+			workspaceUploadProps: {
+				files: [file],
+				states: new Map<File, WorkspaceUploadState>([
+					[file, { status: "uploading" }],
+				]),
+				onAttach: fn(),
+				onRemove: fn(),
+			},
+		};
+	})(),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		expect(await canvas.findByText("video.mp4")).toBeInTheDocument();
+		expect(canvas.getByText(/Uploading/)).toBeInTheDocument();
+		expect(
+			canvas.queryByRole("button", {
+				name: /Copy workspace path/i,
+			}),
+		).not.toBeInTheDocument();
+	},
+};
+
+export const WithWorkspaceUploadError: Story = {
+	args: (() => {
+		const file = createMockFile("huge.iso", "application/octet-stream");
+		return {
+			workspaceUploadProps: {
+				files: [file],
+				states: new Map<File, WorkspaceUploadState>([
+					[
+						file,
+						{
+							status: "error",
+							error: "Upload failed. Agent disconnected.",
+						},
+					],
+				]),
+				onAttach: fn(),
+				onRemove: fn(),
+			},
+		};
+	})(),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		expect(await canvas.findByText("huge.iso")).toBeInTheDocument();
+		expect(canvas.getByText(/Upload failed/i)).toBeInTheDocument();
+		expect(
+			canvas.queryByRole("button", {
+				name: /Copy workspace path/i,
+			}),
+		).not.toBeInTheDocument();
+	},
 };
 
 /** File reference chip rendered inline with text in the editor. */

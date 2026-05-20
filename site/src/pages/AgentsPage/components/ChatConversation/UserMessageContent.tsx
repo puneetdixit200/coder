@@ -2,6 +2,7 @@ import { type FC, Fragment } from "react";
 import { cn } from "#/utils/cn";
 import { Message, MessageContent } from "../ChatElements";
 import { FileReferenceChip } from "../ChatMessageInput/FileReferenceNode";
+import { FileAttachmentTile } from "../FileAttachmentTile";
 import {
 	AttachmentBlock,
 	type PreviewTextAttachment,
@@ -83,6 +84,27 @@ export const UserMessageContent: FC<{
 									onImageClick={onImageClick}
 									onTextFileClick={onTextFileClick}
 									showTextStatus
+								/>
+							))}
+						</div>
+					)}
+					{displayState.hasWorkspaceFileBlocks && (
+						<div
+							className={cn(
+								(displayState.hasUserMessageBody ||
+									displayState.hasFileBlocks) &&
+									"mt-2",
+								"flex flex-wrap gap-2",
+							)}
+						>
+							{displayState.userWorkspaceFileBlocks.map((block, index) => (
+								<FileAttachmentTile
+									key={`user-workspace-file-${index}`}
+									name={block.workspace_file_name}
+									size={block.workspace_file_size}
+									mediaType={block.workspace_file_media_type}
+									metadataLabel="workspace"
+									copyPath={block.workspace_file_path}
 								/>
 							))}
 						</div>

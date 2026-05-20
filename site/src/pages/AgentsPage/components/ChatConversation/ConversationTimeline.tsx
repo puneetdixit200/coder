@@ -34,6 +34,7 @@ import {
 import { WebSearchSources } from "../ChatElements/tools";
 import type { SubagentVariant } from "../ChatElements/tools/subagentDescriptor";
 import { ToolCollapsible } from "../ChatElements/tools/ToolCollapsible";
+import { FileAttachmentTile } from "../FileAttachmentTile";
 import { ImageLightbox } from "../ImageLightbox";
 import { TextPreviewDialog } from "../TextPreviewDialog";
 import {
@@ -397,6 +398,21 @@ export const BlockList: FC<{
 								framePreview
 								showTextStatus
 							/>
+						);
+					case "workspace-file-reference":
+						return (
+							<div
+								key={`${keyPrefix}-workspace-file-${index}`}
+								className="my-1"
+							>
+								<FileAttachmentTile
+									name={block.workspace_file_name}
+									size={block.workspace_file_size}
+									mediaType={block.workspace_file_media_type}
+									metadataLabel="workspace"
+									copyPath={block.workspace_file_path}
+								/>
+							</div>
 						);
 					case "sources":
 						return (

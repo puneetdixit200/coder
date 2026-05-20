@@ -200,18 +200,19 @@ const buildFilePart = (
 });
 
 const buildTextAttachmentPart = (fileId: string): TypesGen.ChatFilePart =>
-	buildFilePart({ file_id: fileId, media_type: "text/plain" });
+	buildFilePart({ file_id: fileId, media_type: "text/plain", size: 2048 });
 
 const buildImageAttachmentPart = (
 	fileId: string,
 	mediaType = "image/png",
 ): TypesGen.ChatFilePart =>
-	buildFilePart({ file_id: fileId, media_type: mediaType });
+	buildFilePart({ file_id: fileId, media_type: mediaType, size: 4096 });
 
 const buildInlineAttachmentPart = (
 	mediaType: string,
 	data: string,
-): TypesGen.ChatFilePart => buildFilePart({ media_type: mediaType, data });
+): TypesGen.ChatFilePart =>
+	buildFilePart({ media_type: mediaType, data, size: data.length });
 
 const buildUserMessage = ({
 	id = 1,
@@ -718,6 +719,35 @@ export const UserMessageWithDownloadableFile: Story = {
 		expect(
 			canvas.queryByRole("button", { name: "Copy message" }),
 		).not.toBeInTheDocument();
+	},
+};
+
+export const UserMessageWithWorkspaceFile: Story = {
+	args: {
+		...defaultArgs,
+		parsedMessages: parseMessagesWithMergedTools([
+			{
+				...baseMessage,
+				id: 1,
+				role: "user",
+				content: [
+					{ type: "text", text: "Please unzip this archive." },
+					{
+						type: "workspace-file-reference",
+						workspace_file_path:
+							"/home/coder/.coder/chats/abcd1234/files/release.zip",
+						workspace_file_name: "release.zip",
+						workspace_file_size: 1024 * 1024 * 4,
+						workspace_file_media_type: "application/zip",
+					},
+				],
+			},
+		]),
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		expect(await canvas.findByText("release.zip")).toBeInTheDocument();
+		expect(canvas.getByText(/workspace/i)).toBeInTheDocument();
 	},
 };
 
