@@ -1,4 +1,3 @@
-import { useEffect, useRef } from "react";
 import type * as TypesGen from "#/api/typesGenerated";
 import {
 	Command,
@@ -12,6 +11,7 @@ import {
 	PopoverAnchor,
 	PopoverContent,
 } from "#/components/Popover/Popover";
+import { personalSkillTriggerText } from "../../utils/personalSkills";
 
 // Prevent zero-height anchors when the browser returns a degenerate caret rect.
 const MIN_ANCHOR_HEIGHT_PX = 16;
@@ -21,10 +21,6 @@ export type CaretAnchorRect = {
 	left: number;
 	height: number;
 };
-
-export const personalSkillTriggerText = (
-	skill: TypesGen.UserSkillMetadata,
-): string => `/${skill.name}`;
 
 type PersonalSkillsTriggerMenuProps = {
 	open: boolean;
@@ -51,23 +47,6 @@ export const PersonalSkillsTriggerMenu = ({
 	onSelect,
 	onClose,
 }: PersonalSkillsTriggerMenuProps) => {
-	const hasSelectedRef = useRef(false);
-
-	useEffect(() => {
-		if (open) {
-			hasSelectedRef.current = false;
-		}
-	}, [open]);
-
-	const handleSelect = (skill: TypesGen.UserSkillMetadata) => {
-		if (hasSelectedRef.current) {
-			return;
-		}
-
-		hasSelectedRef.current = true;
-		onSelect(skill);
-	};
-
 	const handleHighlightedValueChange = (value: string) => {
 		const nextIndex = skills.findIndex((skill) => skill.name === value);
 		if (nextIndex >= 0) {
@@ -137,15 +116,11 @@ export const PersonalSkillsTriggerMenu = ({
 										key={skill.id}
 										value={skill.name}
 										className="items-start"
-										onClick={(event) => {
-											event.preventDefault();
-											handleSelect(skill);
-										}}
-										onSelect={() => handleSelect(skill)}
+										onSelect={() => onSelect(skill)}
 									>
 										<div className="min-w-0 space-y-1">
 											<div className="truncate font-mono text-content-primary text-xs">
-												/{skill.name}
+												{personalSkillTriggerText(skill)}
 											</div>
 											{skill.description.trim() && (
 												<div className="line-clamp-2 text-content-secondary text-xs leading-snug">

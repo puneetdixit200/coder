@@ -18,6 +18,37 @@ type RankedPersonalSkill = {
 	index: number;
 };
 
+export const personalSkillTriggerText = (
+	skill: TypesGen.UserSkillMetadata,
+): string => `/${skill.name}`;
+
+type PersonalSkillTriggerMatch = {
+	slashOffset: number;
+	query: string;
+};
+
+export const parsePersonalSkillTrigger = (
+	linePrefix: string,
+): PersonalSkillTriggerMatch | null => {
+	const match = /(?:^|\s)\/(\S*)$/.exec(linePrefix);
+	if (!match) {
+		return null;
+	}
+
+	const slashIndexInMatch = match[0].indexOf("/");
+	if (slashIndexInMatch === -1) {
+		return null;
+	}
+
+	return {
+		slashOffset: match.index + slashIndexInMatch,
+		query: match[1] ?? "",
+	};
+};
+
+export const isPersonalSkillTriggerToken = (token: string): boolean =>
+	/^\/\S*$/.test(token);
+
 /**
  * Filters personal skills by name and description. Matches are ranked by
  * name prefix, name substring, then description substring.

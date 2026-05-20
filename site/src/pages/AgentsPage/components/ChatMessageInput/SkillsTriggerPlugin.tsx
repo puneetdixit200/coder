@@ -13,6 +13,7 @@ import {
 } from "lexical";
 import { useEffect, useEffectEvent, useRef } from "react";
 import type * as TypesGen from "#/api/typesGenerated";
+import { parsePersonalSkillTrigger } from "../../utils/personalSkills";
 import type { CaretAnchorRect } from "./PersonalSkillsTriggerMenu";
 
 export type ActiveSkillsTrigger = {
@@ -97,23 +98,15 @@ const activeTriggerFromSelection = (): Omit<
 
 	const textBeforeCaret = node.getTextContent().slice(0, anchor.offset);
 	const lineStart = textBeforeCaret.lastIndexOf("\n") + 1;
-	const linePrefix = textBeforeCaret.slice(lineStart);
-	// Accept a slash trigger at the start of a line or after whitespace.
-	// Reject mid-token slashes such as URLs.
-	const match = /(?:^|\s)\/(\S*)$/.exec(linePrefix);
-	if (!match) {
-		return null;
-	}
-
-	const slashIndexInMatch = match[0].indexOf("/");
-	if (slashIndexInMatch === -1) {
+	const trigger = parsePersonalSkillTrigger(textBeforeCaret.slice(lineStart));
+	if (!trigger) {
 		return null;
 	}
 
 	return {
 		nodeKey: node.getKey(),
-		slashOffset: lineStart + match.index + slashIndexInMatch,
-		query: match[1] ?? "",
+		slashOffset: lineStart + trigger.slashOffset,
+		query: trigger.query,
 	};
 };
 
@@ -164,8 +157,8 @@ export const SkillsTriggerPlugin = ({
 	}, [editor]);
 
 	useEffect(() => {
-		globalThis.addEventListener("resize", refreshTrigger);
-		return () => globalThis.removeEventListener("resize", refreshTrigger);
+		addEventListener("resize", refreshTrigger);
+		return () => removeEventListener("resize", refreshTrigger);
 	}, []);
 
 	const moveMenuHighlight = useEffectEvent(

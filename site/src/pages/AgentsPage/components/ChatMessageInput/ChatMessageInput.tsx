@@ -42,15 +42,16 @@ import {
 	MODIFIER_AGENT_CHAT_SEND_SHORTCUT,
 } from "../../utils/agentChatSendShortcut";
 import { isChatAttachmentFile } from "../../utils/chatAttachments";
-import { filterPersonalSkills } from "../../utils/personalSkills";
+import {
+	filterPersonalSkills,
+	isPersonalSkillTriggerToken,
+	personalSkillTriggerText,
+} from "../../utils/personalSkills";
 import {
 	$createFileReferenceNode,
 	FileReferenceNode,
 } from "./FileReferenceNode";
-import {
-	PersonalSkillsTriggerMenu,
-	personalSkillTriggerText,
-} from "./PersonalSkillsTriggerMenu";
+import { PersonalSkillsTriggerMenu } from "./PersonalSkillsTriggerMenu";
 import {
 	createPasteFile,
 	getPasteDataTransfer,
@@ -242,7 +243,7 @@ const PasteSanitizationPlugin: FC<{
 
 					// Convert large pastes to file attachments, but
 					// only for normal Cmd+V. Cmd+Shift+V is the
-					// user’s explicit "paste inline" escape hatch.
+					// user's explicit "paste inline" escape hatch.
 					if (
 						!isPlainTextPaste &&
 						allowTextAttachmentPaste &&
@@ -499,9 +500,6 @@ interface ChatMessageInputProps
 	allowTextAttachmentPaste?: boolean;
 	disabled?: boolean;
 	autoFocus?: boolean;
-	/**
-	 * Story and test seam for deterministic personal skill menu data.
-	 */
 	personalSkillsOverride?: readonly TypesGen.UserSkillMetadata[];
 	"aria-label"?: string;
 }
@@ -519,6 +517,26 @@ const EditableStatePlugin: FC<{ disabled: boolean }> =
 
 		return null;
 	};
+
+const isSameSkillsTrigger = (
+	a: ActiveSkillsTrigger | null,
+	b: ActiveSkillsTrigger | null,
+): boolean => {
+	if (a === b) {
+		return true;
+	}
+	if (!a || !b) {
+		return false;
+	}
+	return (
+		a.nodeKey === b.nodeKey &&
+		a.slashOffset === b.slashOffset &&
+		a.query === b.query &&
+		a.anchorRect?.top === b.anchorRect?.top &&
+		a.anchorRect?.left === b.anchorRect?.left &&
+		a.anchorRect?.height === b.anchorRect?.height
+	);
+};
 
 const ChatMessageInput = ({
 	className,
@@ -568,16 +586,18 @@ const ChatMessageInput = ({
 		enabled: skillsMenuOpen && personalSkillsOverride === undefined,
 	});
 	const personalSkills = personalSkillsOverride ?? skillsQuery.data ?? [];
-	const filteredPersonalSkills = filterPersonalSkills(
-		personalSkills,
-		skillsTrigger?.query ?? "",
-	);
+	const filteredPersonalSkills = skillsTrigger
+		? filterPersonalSkills(personalSkills, skillsTrigger.query)
+		: [];
 	const selectedSkillIndex =
 		filteredPersonalSkills.length === 0
 			? -1
 			: Math.min(skillsMenuSelectedIndex, filteredPersonalSkills.length - 1);
 
 	const handleSkillsTriggerChange = (trigger: ActiveSkillsTrigger | null) => {
+		if (isSameSkillsTrigger(trigger, skillsTrigger)) {
+			return;
+		}
 		if (trigger?.query !== skillsTrigger?.query) {
 			setSkillsMenuSelectedIndex(0);
 		}
@@ -613,7 +633,10 @@ const ChatMessageInput = ({
 			const token = node
 				.getTextContent()
 				.slice(trigger.slashOffset, caretOffset);
-			if (caretOffset < trigger.slashOffset || !/^\/\S*$/.test(token)) {
+			if (
+				caretOffset < trigger.slashOffset ||
+				!isPersonalSkillTriggerToken(token)
+			) {
 				return;
 			}
 

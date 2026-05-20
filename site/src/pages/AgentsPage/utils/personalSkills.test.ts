@@ -4,9 +4,12 @@ import {
 	buildPersonalSkillMarkdown,
 	filterPersonalSkills,
 	getPersonalSkillContentSizeBytes,
+	isPersonalSkillTriggerToken,
 	isValidPersonalSkillName,
 	PERSONAL_SKILL_MAX_SIZE_BYTES,
 	parsePersonalSkillMarkdown,
+	parsePersonalSkillTrigger,
+	personalSkillTriggerText,
 	tryParsePersonalSkillMarkdown,
 } from "./personalSkills";
 
@@ -59,6 +62,34 @@ describe("filterPersonalSkills", () => {
 		expect(
 			filterPersonalSkills(mixedCaseSkills, "changes").map(({ name }) => name),
 		).toEqual(["deploy-bot"]);
+	});
+});
+
+describe("personal skill slash triggers", () => {
+	it("formats skill trigger text", () => {
+		expect(personalSkillTriggerText(skill("reviewer", "", 0))).toBe(
+			"/reviewer",
+		);
+	});
+
+	it("parses trigger text at line start or after whitespace", () => {
+		expect(parsePersonalSkillTrigger("/rev")).toEqual({
+			slashOffset: 0,
+			query: "rev",
+		});
+		expect(parsePersonalSkillTrigger("ask /docs")).toEqual({
+			slashOffset: 4,
+			query: "docs",
+		});
+	});
+
+	it("rejects mid-token slash triggers", () => {
+		expect(parsePersonalSkillTrigger("https://")).toBeNull();
+	});
+
+	it("validates replacement trigger tokens", () => {
+		expect(isPersonalSkillTriggerToken("/rev")).toBe(true);
+		expect(isPersonalSkillTriggerToken("/bad token")).toBe(false);
 	});
 });
 
