@@ -1,7 +1,6 @@
 -- Seed a group_members row so the override below references a real
--- membership. No FK enforces this at the DB level (membership invariant
--- lives in the handler), but a consistent fixture matches what the policy
--- layer expects when resolving the effective group.
+-- membership. A composite FK on (user_id, group_id) requires the
+-- membership to exist before the override can be inserted.
 INSERT INTO group_members (
     user_id,
     group_id

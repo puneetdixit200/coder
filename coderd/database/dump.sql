@@ -4581,6 +4581,9 @@ ALTER TABLE ONLY user_ai_budget_overrides
 ALTER TABLE ONLY user_ai_budget_overrides
     ADD CONSTRAINT user_ai_budget_overrides_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY user_ai_budget_overrides
+    ADD CONSTRAINT user_ai_budget_overrides_user_id_group_id_fkey FOREIGN KEY (user_id, group_id) REFERENCES group_members(user_id, group_id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY user_chat_provider_keys
     ADD CONSTRAINT user_chat_provider_keys_api_key_key_id_fkey FOREIGN KEY (api_key_key_id) REFERENCES dbcrypt_keys(active_key_digest);
 

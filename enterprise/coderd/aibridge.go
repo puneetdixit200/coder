@@ -877,9 +877,9 @@ func (api *API) upsertUserAIBudgetOverride(rw http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Verify the user is a member of the referenced group. The schema does
-	// not enforce this at the DB level (see cost-control.md); the handler
-	// is the only write-time check.
+	// Verify the user is a member of the referenced group up-front so the
+	// caller gets a structured 400 instead of a raw FK violation. The DB
+	// also enforces this via a composite FK to group_members.
 	if _, err := api.Database.GetGroupMember(ctx, database.GetGroupMemberParams{
 		UserID:  user.ID,
 		GroupID: req.GroupID,
