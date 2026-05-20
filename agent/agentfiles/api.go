@@ -35,6 +35,8 @@ func (api *API) Routes() http.Handler {
 	r.Get("/read-file", api.HandleReadFile)
 	r.Get("/read-file-lines", api.HandleReadFileLines)
 	r.Post("/write-file", api.HandleWriteFile)
+	r.Post("/upload-chat-file", api.HandleUploadChatFile)
+	r.Delete("/delete-chat-files", api.HandleDeleteChatFiles)
 	r.Post("/edit-files", api.HandleEditFiles)
 
 	return r

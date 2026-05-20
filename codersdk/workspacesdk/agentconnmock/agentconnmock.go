@@ -174,6 +174,20 @@ func (mr *MockAgentConnMockRecorder) DebugManifest(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DebugManifest", reflect.TypeOf((*MockAgentConn)(nil).DebugManifest), ctx)
 }
 
+// DeleteChatFiles mocks base method.
+func (m *MockAgentConn) DeleteChatFiles(ctx context.Context, chatID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteChatFiles", ctx, chatID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteChatFiles indicates an expected call of DeleteChatFiles.
+func (mr *MockAgentConnMockRecorder) DeleteChatFiles(ctx, chatID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteChatFiles", reflect.TypeOf((*MockAgentConn)(nil).DeleteChatFiles), ctx, chatID)
+}
+
 // DeleteDevcontainer mocks base method.
 func (m *MockAgentConn) DeleteDevcontainer(ctx context.Context, devcontainerID string) error {
 	m.ctrl.T.Helper()
@@ -622,6 +636,21 @@ func (m *MockAgentConn) TailnetConn() *tailnet.Conn {
 func (mr *MockAgentConnMockRecorder) TailnetConn() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TailnetConn", reflect.TypeOf((*MockAgentConn)(nil).TailnetConn))
+}
+
+// UploadChatFile mocks base method.
+func (m *MockAgentConn) UploadChatFile(ctx context.Context, req workspacesdk.UploadChatFileRequest) (workspacesdk.UploadChatFileResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UploadChatFile", ctx, req)
+	ret0, _ := ret[0].(workspacesdk.UploadChatFileResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UploadChatFile indicates an expected call of UploadChatFile.
+func (mr *MockAgentConnMockRecorder) UploadChatFile(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadChatFile", reflect.TypeOf((*MockAgentConn)(nil).UploadChatFile), ctx, req)
 }
 
 // WatchContainers mocks base method.

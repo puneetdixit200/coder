@@ -121,6 +121,8 @@ type AgentConn interface {
 	ReadFile(ctx context.Context, path string, offset, limit int64) (io.ReadCloser, string, error)
 	ReadFileLines(ctx context.Context, path string, offset, limit int64, limits ReadFileLinesLimits) (ReadFileLinesResponse, error)
 	WriteFile(ctx context.Context, path string, reader io.Reader) error
+	UploadChatFile(ctx context.Context, req UploadChatFileRequest) (UploadChatFileResponse, error)
+	DeleteChatFiles(ctx context.Context, chatID string) error
 	EditFiles(ctx context.Context, edits FileEditRequest) (FileEditResponse, error)
 	SSH(ctx context.Context) (*gonet.TCPConn, error)
 	SSHClient(ctx context.Context) (*ssh.Client, error)
@@ -1016,6 +1018,72 @@ func (c *agentConn) WriteFile(ctx context.Context, path string, reader io.Reader
 	var m codersdk.Response
 	if err := json.NewDecoder(res.Body).Decode(&m); err != nil {
 		return xerrors.Errorf("decode response body: %w", err)
+	}
+	return nil
+}
+
+// UploadChatFileRequest is the streaming request for the agent's
+// chat-file upload endpoint.
+type UploadChatFileRequest struct {
+	// ChatID is the full chat UUID used to namespace the upload directory.
+	ChatID string
+	// Name is the filename. Coderd sanitizes it before the call; the
+	// agent sanitizes again as defense in depth for direct tailnet
+	// callers.
+	Name string
+	// Body must remain readable until UploadChatFile returns.
+	Body io.Reader
+}
+
+// UploadChatFileResponse is the JSON response from the chat-file
+// upload endpoint. Path is absolute on the workspace; Name is the
+// final (post-sanitize, post-collision-suffix) basename.
+type UploadChatFileResponse struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+}
+
+// UploadChatFile streams a file body to the workspace agent and
+// returns the final absolute path. The agent resolves $HOME, creates
+// the per-chat directory, picks a non-colliding filename, and writes the file.
+func (c *agentConn) UploadChatFile(ctx context.Context, req UploadChatFileRequest) (UploadChatFileResponse, error) {
+	ctx, span := tracing.StartSpan(ctx)
+	defer span.End()
+
+	res, err := c.apiRequest(ctx, http.MethodPost, agentAPIPath("/api/v0/upload-chat-file", neturl.Values{
+		"chat_id": []string{req.ChatID},
+		"name":    []string{req.Name},
+	}), req.Body)
+	if err != nil {
+		return UploadChatFileResponse{}, xerrors.Errorf("do request: %w", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return UploadChatFileResponse{}, codersdk.ReadBodyAsError(res)
+	}
+
+	var out UploadChatFileResponse
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return UploadChatFileResponse{}, xerrors.Errorf("decode response body: %w", err)
+	}
+	return out, nil
+}
+
+// DeleteChatFiles removes the chat-scoped workspace upload directory.
+func (c *agentConn) DeleteChatFiles(ctx context.Context, chatID string) error {
+	ctx, span := tracing.StartSpan(ctx)
+	defer span.End()
+
+	res, err := c.apiRequest(ctx, http.MethodDelete, agentAPIPath("/api/v0/delete-chat-files", neturl.Values{
+		"chat_id": []string{chatID},
+	}), nil)
+	if err != nil {
+		return xerrors.Errorf("do request: %w", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return codersdk.ReadBodyAsError(res)
 	}
 	return nil
 }
