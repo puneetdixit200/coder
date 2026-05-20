@@ -218,17 +218,17 @@ jobs:
         env:
           FINAL_SHA: ${{ steps.shas.outputs.final_sha }}
           DOCKER_TAG: ${{ steps.docker-tag-name.outputs.tag }}
-        # `mise oci push` reads the OCI layout written by `mise oci build`
-        # and copies it to the registry; the image never lands in the
-        # local Docker daemon, so push each tag via mise rather than
-        # docker tag/push. The registry deduplicates layers across tags.
+        # --image-dir points at the OCI layout written by the previous
+        # `mise oci build` step. Without it, `mise oci push` rebuilds
+        # from mise.toml and forgets the --from base. The registry
+        # deduplicates layers across the alias tags.
         # TODO: move the `latest` tag to 26.04 soon. we don't want to
         # transition it immediately because that would make workspaces
         # switch to it automatically without any grace period.
         run: |
           set -euo pipefail
           for tag in "${FINAL_SHA}-22.04" "$DOCKER_TAG" 22.04 latest; do
-            mise oci push "codercom/oss-dogfood:$tag"
+            mise oci push --image-dir ./mise-oci "codercom/oss-dogfood:$tag"
           done
 
       - name: Push final Ubuntu 26.04 image
@@ -239,7 +239,7 @@ jobs:
         run: |
           set -euo pipefail
           for tag in "${FINAL_SHA}-26.04" "$DOCKER_TAG" 26.04; do
-            mise oci push "codercom/oss-dogfood:$tag"
+            mise oci push --image-dir ./mise-oci "codercom/oss-dogfood:$tag"
           done
 
       - name: Build and push vscode-coder image
