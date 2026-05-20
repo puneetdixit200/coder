@@ -144,17 +144,6 @@ jobs:
           rm /tmp/mise
           mise --version
 
-      - name: Compute image SHAs
-        if: matrix.image-version != 'nix'
-        id: shas
-        env:
-          IMAGE_VERSION: ${{ matrix.image-version }}
-        run: |
-          base_sha="$(./scripts/dogfood/compute-base-sha.sh "$IMAGE_VERSION")"
-          final_sha="$(./scripts/dogfood/compute-final-sha.sh "$IMAGE_VERSION")"
-          echo "base_sha=${base_sha}" >> "$GITHUB_OUTPUT"
-          echo "final_sha=${final_sha}" >> "$GITHUB_OUTPUT"
-
       - name: Login to GHCR
         # Fork PRs get a read-only GITHUB_TOKEN that cannot push to
         # ghcr.io. Skip the entire GHCR-dependent pipeline (base push +
@@ -186,10 +175,12 @@ jobs:
           file: dogfood/coder/ubuntu-${{ matrix.image-version }}/Dockerfile.base
           pull: true
           # Push to ghcr.io on every non-fork CI run so the downstream
-          # mise oci build can --from a real registry.
+          # mise oci build can --from a real registry. Tag by commit SHA
+          # so concurrent CI runs of different commits don't clobber each
+          # other's tag mid-build.
           push: true
           tags: |
-            ghcr.io/coder/oss-dogfood-base:${{ matrix.image-version }}-${{ steps.shas.outputs.base_sha }}
+            ghcr.io/coder/oss-dogfood-base:${{ matrix.image-version }}-${{ github.sha }}
             ghcr.io/coder/oss-dogfood-base:${{ matrix.image-version }}-${{ steps.docker-tag-name.outputs.tag }}
 
       - name: Install mise tools
@@ -206,17 +197,16 @@ jobs:
         if: matrix.image-version != 'nix' && !github.event.pull_request.head.repo.fork
         env:
           IMAGE_VERSION: ${{ matrix.image-version }}
-          BASE_SHA: ${{ steps.shas.outputs.base_sha }}
-          FINAL_SHA: ${{ steps.shas.outputs.final_sha }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           mise oci build \
-            --from "ghcr.io/coder/oss-dogfood-base:${IMAGE_VERSION}-${BASE_SHA}" \
-            --tag "codercom/oss-dogfood:${FINAL_SHA}-${IMAGE_VERSION}"
+            --from "ghcr.io/coder/oss-dogfood-base:${IMAGE_VERSION}-${COMMIT_SHA}" \
+            --tag "codercom/oss-dogfood:${COMMIT_SHA}-${IMAGE_VERSION}"
 
       - name: Push final Ubuntu 22.04 image
         if: matrix.image-version == '22.04' && github.ref == 'refs/heads/main'
         env:
-          FINAL_SHA: ${{ steps.shas.outputs.final_sha }}
+          COMMIT_SHA: ${{ github.sha }}
           DOCKER_TAG: ${{ steps.docker-tag-name.outputs.tag }}
         # --image-dir points at the OCI layout written by the previous
         # `mise oci build` step. Without it, `mise oci push` rebuilds
@@ -227,18 +217,18 @@ jobs:
         # switch to it automatically without any grace period.
         run: |
           set -euo pipefail
-          for tag in "${FINAL_SHA}-22.04" "$DOCKER_TAG" 22.04 latest; do
+          for tag in "${COMMIT_SHA}-22.04" "$DOCKER_TAG" 22.04 latest; do
             mise oci push --image-dir ./mise-oci "codercom/oss-dogfood:$tag"
           done
 
       - name: Push final Ubuntu 26.04 image
         if: matrix.image-version == '26.04' && github.ref == 'refs/heads/main'
         env:
-          FINAL_SHA: ${{ steps.shas.outputs.final_sha }}
+          COMMIT_SHA: ${{ github.sha }}
           DOCKER_TAG: ${{ steps.docker-tag-name.outputs.tag }}
         run: |
           set -euo pipefail
-          for tag in "${FINAL_SHA}-26.04" "$DOCKER_TAG" 26.04; do
+          for tag in "${COMMIT_SHA}-26.04" "$DOCKER_TAG" 26.04; do
             mise oci push --image-dir ./mise-oci "codercom/oss-dogfood:$tag"
           done
 

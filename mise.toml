@@ -72,11 +72,11 @@ install_env = { CGO_ENABLED = "1" }
 # tool installs there and the base image's `MISE_SHARED_INSTALL_DIRS`
 # env exposes them at runtime.
 #
-# We do NOT set [oci].env — mise oci hard-overwrites MISE_DATA_DIR
-# and MISE_CONFIG_DIR to in-image paths regardless of [oci].env, and
-# every other env we care about (PATH, HOMEBREW_PREFIX, CARGO_HOME,
-# GOPRIVATE, MISE_TRUSTED_CONFIG_PATHS, MISE_SHARED_INSTALL_DIRS,
-# NODE_OPTIONS) is set by the base image and inherited by mise oci.
+# We do NOT set [oci].env. mise oci hard-overwrites MISE_DATA_DIR and
+# MISE_CONFIG_DIR to in-image paths regardless of [oci].env, and every
+# other env we care about (PATH, HOMEBREW_PREFIX, CARGO_HOME, GOPRIVATE,
+# MISE_TRUSTED_CONFIG_PATHS, MISE_SHARED_INSTALL_DIRS, NODE_OPTIONS) is
+# set by the base image and inherited by mise oci.
 [oci]
 mount_point = "/opt/mise/data"
 user = "coder"
