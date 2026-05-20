@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -25,6 +26,13 @@ const (
 	userSecretValueField    = "value"
 	userSecretEnvNameField  = "env_name"
 	userSecretFilePathField = "file_path"
+
+	// These names are raised by the enforce_user_secrets_per_user_limits
+	// trigger with USING CONSTRAINT. They are not table CHECK
+	// constraints, so dbgen does not emit them in check_constraint.go.
+	userSecretsCountLimitConstraint      database.CheckConstraint = "user_secrets_per_user_count_limit"
+	userSecretsTotalBytesLimitConstraint database.CheckConstraint = "user_secrets_per_user_total_bytes_limit"
+	userSecretsEnvBytesLimitConstraint   database.CheckConstraint = "user_secrets_per_user_env_bytes_limit"
 )
 
 // @Summary Create a new user secret
@@ -74,6 +82,10 @@ func (api *API) postUserSecret(rw http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if validations := userSecretConflictValidationErrors(err); len(validations) > 0 {
 			writeUserSecretValidationErrors(ctx, rw, http.StatusConflict, validations)
+			return
+		}
+		if resp, ok := userSecretLimitResponse(err); ok {
+			httpapi.Write(ctx, rw, http.StatusBadRequest, resp)
 			return
 		}
 		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
@@ -256,6 +268,10 @@ func (api *API) patchUserSecret(rw http.ResponseWriter, r *http.Request) {
 			writeUserSecretValidationErrors(ctx, rw, http.StatusConflict, validations)
 			return
 		}
+		if resp, ok := userSecretLimitResponse(err); ok {
+			httpapi.Write(ctx, rw, http.StatusBadRequest, resp)
+			return
+		}
 		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
 			Message: "Internal error updating secret.",
 			Detail:  err.Error(),
@@ -368,6 +384,42 @@ func appendUserSecretValidationError(validations []codersdk.ValidationError, fie
 		Field:  field,
 		Detail: err.Error(),
 	})
+}
+
+// userSecretLimitResponse maps a per-user-limits trigger violation
+// (raised by enforce_user_secrets_per_user_limits) to a 400. Returns
+// ok=false if err is not such a violation. See
+// codersdk.MaxUserSecretsPerUser for the rationale behind the caps.
+func userSecretLimitResponse(err error) (codersdk.Response, bool) {
+	switch {
+	case database.IsCheckViolation(err, userSecretsCountLimitConstraint):
+		return codersdk.Response{
+			Message: "User secrets limit reached.",
+			Detail: fmt.Sprintf(
+				"Each user can have at most %d secrets.",
+				codersdk.MaxUserSecretsPerUser,
+			),
+		}, true
+	case database.IsCheckViolation(err, userSecretsTotalBytesLimitConstraint):
+		return codersdk.Response{
+			Message: "User secrets value-bytes limit reached.",
+			Detail: fmt.Sprintf(
+				"The combined size of a user's secret values may not exceed %d bytes.",
+				codersdk.MaxUserSecretsTotalValueBytes,
+			),
+		}, true
+	case database.IsCheckViolation(err, userSecretsEnvBytesLimitConstraint):
+		return codersdk.Response{
+			Message: "Environment-injected user secrets bytes limit reached.",
+			Detail: fmt.Sprintf(
+				"The combined size of secret values with env_name set may not "+
+					"exceed %d bytes. Increase headroom by clearing env_name on "+
+					"large secrets and using file_path instead.",
+				codersdk.MaxUserSecretsEnvValueBytes,
+			),
+		}, true
+	}
+	return codersdk.Response{}, false
 }
 
 func userSecretConflictValidationErrors(err error) []codersdk.ValidationError {

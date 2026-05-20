@@ -1,6 +1,7 @@
 package coderd_test
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -461,6 +462,116 @@ func requireSecretValidation(t *testing.T, err error, status int, field string) 
 	}
 	require.Failf(t, "missing validation", "field %q not found in %#v", field, sdkErr.Validations)
 	return codersdk.ValidationError{}
+}
+
+// TestPostUserSecretLimits exercises the per-user count and byte
+// caps enforced by enforce_user_secrets_per_user_limits. Each
+// subtest uses its own client+user so it can burn through the
+// budget without polluting the shared state used by other tests.
+func TestPostUserSecretLimits(t *testing.T) {
+	t.Parallel()
+
+	t.Run("CountLimit", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		client := coderdtest.New(t, nil)
+		_ = coderdtest.CreateFirstUser(t, client)
+
+		// Fill the count budget exactly to the cap.
+		for i := 0; i < codersdk.MaxUserSecretsPerUser; i++ {
+			_, err := client.CreateUserSecret(ctx, codersdk.Me, codersdk.CreateUserSecretRequest{
+				Name:  fmt.Sprintf("count-limit-%03d", i),
+				Value: "x",
+			})
+			require.NoError(t, err)
+		}
+
+		// One more secret should be rejected.
+		_, err := client.CreateUserSecret(ctx, codersdk.Me, codersdk.CreateUserSecretRequest{
+			Name:  "one-too-many",
+			Value: "x",
+		})
+		requireSecretAPIError(t, err, http.StatusBadRequest, "at most")
+	})
+
+	t.Run("TotalBytesLimit", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		client := coderdtest.New(t, nil)
+		_ = coderdtest.CreateFirstUser(t, client)
+
+		// Pre-fill the total-bytes budget exactly to the cap using
+		// max-sized file-only secrets (which don't count against env
+		// bytes).
+		big := strings.Repeat("a", codersdk.MaxSecretValueSize)
+		numAtCap := codersdk.MaxUserSecretsTotalValueBytes / codersdk.MaxSecretValueSize
+		for i := 0; i < numAtCap; i++ {
+			_, err := client.CreateUserSecret(ctx, codersdk.Me, codersdk.CreateUserSecretRequest{
+				Name:     fmt.Sprintf("big-%03d", i),
+				Value:    big,
+				FilePath: fmt.Sprintf("/tmp/big-%03d", i),
+			})
+			require.NoError(t, err)
+		}
+
+		// One more byte pushes past the total budget.
+		_, err := client.CreateUserSecret(ctx, codersdk.Me, codersdk.CreateUserSecretRequest{
+			Name:     "overflow",
+			Value:    "x",
+			FilePath: "/tmp/overflow",
+		})
+		requireSecretAPIError(t, err, http.StatusBadRequest, "combined size")
+	})
+
+	t.Run("EnvBytesLimit", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitLong)
+
+		client := coderdtest.New(t, nil)
+		_ = coderdtest.CreateFirstUser(t, client)
+
+		// One env-injected secret consumes nearly the whole env budget.
+		_, err := client.CreateUserSecret(ctx, codersdk.Me, codersdk.CreateUserSecretRequest{
+			Name:    "env-big",
+			Value:   strings.Repeat("a", codersdk.MaxUserSecretsEnvValueBytes-16),
+			EnvName: "ENV_BIG",
+		})
+		require.NoError(t, err)
+
+		// Another env-injected secret pushes us over the env budget.
+		_, err = client.CreateUserSecret(ctx, codersdk.Me, codersdk.CreateUserSecretRequest{
+			Name:    "env-overflow",
+			Value:   strings.Repeat("a", 1024),
+			EnvName: "ENV_OVERFLOW",
+		})
+		requireSecretAPIError(t, err, http.StatusBadRequest, "env_name")
+
+		// A same-sized value used purely as a file is fine because
+		// file_path secrets do not count against the env budget.
+		_, err = client.CreateUserSecret(ctx, codersdk.Me, codersdk.CreateUserSecretRequest{
+			Name:     "file-ok",
+			Value:    strings.Repeat("a", 1024),
+			FilePath: "/tmp/file-ok",
+		})
+		require.NoError(t, err)
+	})
+}
+
+// requireSecretAPIError asserts a non-validation user-facing error.
+// Used for trigger-driven failures (per-user limits) whose responses
+// are plain codersdk.Response without ValidationError entries.
+func requireSecretAPIError(t *testing.T, err error, status int, detailContains string) {
+	t.Helper()
+	require.Error(t, err)
+	var sdkErr *codersdk.Error
+	require.ErrorAs(t, err, &sdkErr)
+	assert.Equal(t, status, sdkErr.StatusCode())
+	combined := sdkErr.Message + " " + sdkErr.Response.Detail
+	assert.Containsf(t, combined, detailContains,
+		"expected response to contain %q; got Message=%q Detail=%q",
+		detailContains, sdkErr.Message, sdkErr.Response.Detail)
 }
 
 func TestDeleteUserSecret(t *testing.T) {

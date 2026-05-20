@@ -5205,6 +5205,64 @@ export const MaxChatFileSizeBytes = 10485760;
  */
 export const MaxSecretValueSize = 32768; // 32KB
 
+// From codersdk/usersecretvalidation.go
+/**
+ * MaxUserSecretsEnvValueBytes caps the sum of stored value bytes
+ * across secrets with env_name set. Defends the Windows env block.
+ * See MaxUserSecretsPerUser for the full rationale and math behind
+ * all three caps.
+ */
+export const MaxUserSecretsEnvValueBytes = 24576; // 24 KiB
+
+// From codersdk/usersecretvalidation.go
+/**
+ * MaxUserSecretsPerUser caps the number of secrets a single user
+ * may own.
+ *
+ * Why a cap exists at all: user_secrets is user-scoped, so every
+ * workspace the user owns loads the same set into its agent
+ * manifest, and env-injected ones land in the workspace agent's
+ * process env. Without a cap, a user can overflow one of three
+ * external limits by accumulating enough secrets, or by making
+ * them large enough. The failure surfaces at workspace start (or
+ * as a truncated env), not at create-time.
+ *
+ * What drives each cap, and the rough math:
+ *
+ *   - Count (50): backstops abuse, well under the ~120-secret
+ *     ceiling where the manifest itself would overflow at the
+ *     32 KiB MaxSecretValueSize per value.
+ *
+ *   - Total bytes (1 MiB): ~25 % of the 4 MiB DRPC agent manifest
+ *     budget (codersdk/drpcsdk.MaxMessageSize); the rest covers
+ *     apps, scripts, metadata, devcontainers, etc.
+ *
+ *   - Env bytes (24 KiB): under the ~32 KiB Windows process env
+ *     block with headroom for the agent's own env (CODER_*, PATH,
+ *     HOME, ...). file_path secrets bypass the env block on every
+ *     OS and aren't counted. Linux/macOS ARG_MAX (~2 MiB) is far
+ *     above this, so one Windows-safe cap works everywhere.
+ *
+ * Byte caps measure stored bytes (octet_length of encrypted+base64).
+ * Plaintext is slightly tighter in encrypted deployments. That is
+ * fine: the limits we defend all measure transmitted bytes, and
+ * stored bytes upper-bound those.
+ *
+ * The Postgres trigger enforce_user_secrets_per_user_limits is the
+ * source of truth; the HTTP handler maps its check_violation to a
+ * 400. TestUserSecretsLimitsSchemaConstants asserts the trigger's
+ * literals match these constants.
+ */
+export const MaxUserSecretsPerUser = 50;
+
+// From codersdk/usersecretvalidation.go
+/**
+ * MaxUserSecretsTotalValueBytes caps the sum of stored value bytes
+ * per user. Defends the DRPC manifest. See MaxUserSecretsPerUser
+ * for the full rationale and math behind all three caps.
+ */
+export const MaxUserSecretsTotalValueBytes = 1048576; // 1 MiB
+
 // From codersdk/organizations.go
 export interface MinimalOrganization {
 	readonly id: string;
