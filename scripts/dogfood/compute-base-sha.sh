@@ -12,6 +12,12 @@ cd "$repo_root"
 paths=(
 	"dogfood/coder/ubuntu-${distro}/Dockerfile.base"
 	"dogfood/coder/ubuntu-${distro}/files"
+	# Dockerfile.base bakes these into /etc/mise so their content
+	# affects the base image. Hashing them here keeps the base-sha
+	# stable across concurrent CI runs and prevents one run from
+	# clobbering another's ghcr tag.
+	"mise.toml"
+	"mise.lock"
 )
 if [ "$distro" = "22.04" ]; then
 	paths+=("dogfood/coder/ubuntu-${distro}/configure-chrome-flags.sh")
