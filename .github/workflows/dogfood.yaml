@@ -156,7 +156,10 @@ jobs:
           echo "final_sha=${final_sha}" >> "$GITHUB_OUTPUT"
 
       - name: Login to GHCR
-        if: matrix.image-version != 'nix'
+        # Fork PRs get a read-only GITHUB_TOKEN that cannot push to
+        # ghcr.io. Skip the entire GHCR-dependent pipeline (base push +
+        # mise oci build) for fork PRs; the nix matrix entry still runs.
+        if: matrix.image-version != 'nix' && !github.event.pull_request.head.repo.fork
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ghcr.io
@@ -172,7 +175,7 @@ jobs:
 
       - name: Build base image
         uses: depot/build-push-action@5f3b3c2e5a00f0093de47f657aeaefcedff27d18 # v1.17.0
-        if: matrix.image-version != 'nix'
+        if: matrix.image-version != 'nix' && !github.event.pull_request.head.repo.fork
         with:
           project: b4q6ltmpzh
           token: ${{ secrets.DEPOT_TOKEN }}
@@ -182,15 +185,15 @@ jobs:
           context: "{{defaultContext}}"
           file: dogfood/coder/ubuntu-${{ matrix.image-version }}/Dockerfile.base
           pull: true
-          # Push to ghcr.io on every CI run (including PRs) so the
-          # downstream mise oci build can --from a real registry.
+          # Push to ghcr.io on every non-fork CI run so the downstream
+          # mise oci build can --from a real registry.
           push: true
           tags: |
             ghcr.io/coder/oss-dogfood-base:${{ matrix.image-version }}-${{ steps.shas.outputs.base_sha }}
             ghcr.io/coder/oss-dogfood-base:${{ matrix.image-version }}-${{ steps.docker-tag-name.outputs.tag }}
 
       - name: Install mise tools
-        if: matrix.image-version != 'nix'
+        if: matrix.image-version != 'nix' && !github.event.pull_request.head.repo.fork
         # `mise oci build` packages already-installed tools into OCI
         # layers; it does not install them. Run `mise install` first so
         # the tools land in MISE_DATA_DIR on the runner.
@@ -200,7 +203,7 @@ jobs:
         run: mise install --yes
 
       - name: Build mise oci layer
-        if: matrix.image-version != 'nix'
+        if: matrix.image-version != 'nix' && !github.event.pull_request.head.repo.fork
         env:
           IMAGE_VERSION: ${{ matrix.image-version }}
           BASE_SHA: ${{ steps.shas.outputs.base_sha }}
@@ -215,16 +218,17 @@ jobs:
         env:
           FINAL_SHA: ${{ steps.shas.outputs.final_sha }}
           DOCKER_TAG: ${{ steps.docker-tag-name.outputs.tag }}
+        # `mise oci push` reads the OCI layout written by `mise oci build`
+        # and copies it to the registry; the image never lands in the
+        # local Docker daemon, so push each tag via mise rather than
+        # docker tag/push. The registry deduplicates layers across tags.
+        # TODO: move the `latest` tag to 26.04 soon. we don't want to
+        # transition it immediately because that would make workspaces
+        # switch to it automatically without any grace period.
         run: |
           set -euo pipefail
-          SRC="codercom/oss-dogfood:${FINAL_SHA}-22.04"
-          mise oci push "$SRC"
-          # TODO: move the `latest` tag to 26.04 soon. we don't want to
-          # transition it immediately because that would make workspaces
-          # switch to it automatically without any grace period.
-          for tag in "$DOCKER_TAG" 22.04 latest; do
-            docker tag "$SRC" "codercom/oss-dogfood:$tag"
-            docker push "codercom/oss-dogfood:$tag"
+          for tag in "${FINAL_SHA}-22.04" "$DOCKER_TAG" 22.04 latest; do
+            mise oci push "codercom/oss-dogfood:$tag"
           done
 
       - name: Push final Ubuntu 26.04 image
@@ -234,11 +238,8 @@ jobs:
           DOCKER_TAG: ${{ steps.docker-tag-name.outputs.tag }}
         run: |
           set -euo pipefail
-          SRC="codercom/oss-dogfood:${FINAL_SHA}-26.04"
-          mise oci push "$SRC"
-          for tag in "$DOCKER_TAG" 26.04; do
-            docker tag "$SRC" "codercom/oss-dogfood:$tag"
-            docker push "codercom/oss-dogfood:$tag"
+          for tag in "${FINAL_SHA}-26.04" "$DOCKER_TAG" 26.04; do
+            mise oci push "codercom/oss-dogfood:$tag"
           done
 
       - name: Build and push vscode-coder image
