@@ -16,6 +16,12 @@ set -euo pipefail
 
 MISE_IMAGE="jdxcode/mise:latest"
 RUNTIME="${CONTAINER_RUNTIME:-docker}"
+
+# Mount the repo root rather than $PWD: `make -C dogfood/coder` invokes
+# the wrapper from dogfood/coder/, but the project mise.toml/mise.lock
+# `mise oci build` consumes live at the repo root.
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
 platform_arg=()
 if [ "$RUNTIME" = "container" ]; then
 	platform_arg=(--platform linux/amd64)
@@ -35,7 +41,7 @@ if [ -d "$HOME/.docker" ]; then
 fi
 
 exec "$RUNTIME" run --rm "${platform_arg[@]}" \
-	-v "$PWD":/src -w /src \
+	-v "$REPO_ROOT":/src -w /src \
 	"${docker_config_arg[@]}" \
 	-e MISE_EXPERIMENTAL=1 \
 	-e MISE_TRUSTED_CONFIG_PATHS=/src \
