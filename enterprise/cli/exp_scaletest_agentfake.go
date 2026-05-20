@@ -5,6 +5,7 @@ package cli
 import (
 	"os/signal"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/xerrors"
 
@@ -77,9 +78,12 @@ func (r *RootCmd) scaletestAgentFake() *serpent.Command {
 				promhttp.Handler(), prometheusAddress, "prometheus")
 			defer prometheusSrvClose()
 
+			metrics := agentfake.NewMetrics(prometheus.DefaultRegisterer)
+
 			mgr := agentfake.NewManager(client, logger, agentfake.ManagerOptions{
 				Template: template,
 				Owner:    owner,
+				Metrics:  metrics,
 			})
 			defer mgr.Close()
 

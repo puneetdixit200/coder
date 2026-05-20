@@ -20,15 +20,19 @@ type Agent struct {
 	coderURL *url.URL
 	token    string
 	logger   slog.Logger
+	metrics  *Metrics
 
 	cancel context.CancelFunc
 }
 
-func NewAgent(coderURL *url.URL, token string, logger slog.Logger) *Agent {
+// NewAgent constructs a fake agent. metrics is optional; pass nil to disable
+// per-agent metric reporting (useful in tests).
+func NewAgent(coderURL *url.URL, token string, logger slog.Logger, metrics *Metrics) *Agent {
 	return &Agent{
 		coderURL: coderURL,
 		token:    token,
 		logger:   logger,
+		metrics:  metrics,
 	}
 }
 
@@ -68,8 +72,10 @@ func (a *Agent) connectAndServe(ctx context.Context, client *agentsdk.Client) er
 		return xerrors.Errorf("connect dRPC: %w", err)
 	}
 	conn := rpc.DRPCConn()
+	a.metrics.incConnected()
 	defer func() {
 		_ = conn.Close()
+		a.metrics.decConnected()
 	}()
 
 	// Real agents transition to READY once their startup script finishes. Fakes have no startup script, so they're

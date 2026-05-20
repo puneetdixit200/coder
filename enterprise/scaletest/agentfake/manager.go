@@ -42,6 +42,9 @@ type ManagerOptions struct {
 	Template string
 	// Owner restricts enumeration to workspaces owned by the given user. Optional; if empty, all owners are included.
 	Owner string
+	// Metrics is the collector handle used by the manager and the agents it
+	// spawns. Optional; if nil, metric reporting is disabled.
+	Metrics *Metrics
 }
 
 // Manager supervises a set of fake Agents in one process. It enumerates the agents it owns from coderd at Run time
@@ -85,7 +88,7 @@ func (m *Manager) Run(ctx context.Context) error {
 	agents := make([]*Agent, 0, len(tokens))
 	for i, ti := range tokens {
 		agents = append(agents, NewAgent(m.client.URL, ti.Token,
-			m.logger.Named("agent-"+strconv.Itoa(i))))
+			m.logger.Named("agent-"+strconv.Itoa(i)), m.opts.Metrics))
 	}
 	m.mu.Lock()
 	m.agents = agents
@@ -145,6 +148,11 @@ func (m *Manager) enumerateWithRetry(ctx context.Context) ([]TokenInfo, error) {
 // external agent. Per-agent credential failures are logged and skipped; a non-nil error is returned only if the
 // workspace listing itself fails.
 func (m *Manager) EnumerateExternalAgents(ctx context.Context) ([]TokenInfo, error) {
+	start := time.Now()
+	m.logger.Info(ctx, "enumerating external-agent workspaces",
+		slog.F("template", m.opts.Template),
+		slog.F("owner", m.opts.Owner))
+
 	var workspaces []codersdk.Workspace
 	filter := codersdk.WorkspaceFilter{
 		Template: m.opts.Template,
@@ -192,6 +200,12 @@ func (m *Manager) EnumerateExternalAgents(ctx context.Context) ([]TokenInfo, err
 			}
 		}
 	}
+	m.logger.Info(ctx, "enumerated external-agent workspaces",
+		slog.F("template", m.opts.Template),
+		slog.F("owner", m.opts.Owner),
+		slog.F("workspaces", len(workspaces)),
+		slog.F("tokens", len(tokens)),
+		slog.F("duration", time.Since(start)))
 	return tokens, nil
 }
 
