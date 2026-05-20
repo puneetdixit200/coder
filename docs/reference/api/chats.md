@@ -65,7 +65,8 @@ Experimental: this endpoint is subject to change.
         "mime_type": "string",
         "name": "string",
         "organization_id": "7c60d51f-b44e-4682-87d6-449835ea4de6",
-        "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05"
+        "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05",
+        "size": 0
       }
     ],
     "has_unread": true,
@@ -128,6 +129,7 @@ Experimental: this endpoint is subject to change.
         "result_delta": "string",
         "result_reset": true,
         "signature": "string",
+        "size": 0,
         "skill_description": "string",
         "skill_dir": "string",
         "skill_name": "string",
@@ -138,7 +140,11 @@ Experimental: this endpoint is subject to change.
         "tool_call_id": "string",
         "tool_name": "string",
         "type": "text",
-        "url": "string"
+        "url": "string",
+        "workspace_file_media_type": "string",
+        "workspace_file_name": "string",
+        "workspace_file_path": "string",
+        "workspace_file_size": 0
       }
     ],
     "last_model_config_id": "30ebb95f-c255-4759-9429-89aa4ec1554c",
@@ -211,6 +217,7 @@ Status Code **200**
 | `»» name`                         | string                                                                 | false    |              |                                                                                                                                                                                                                                                                                                                                  |
 | `»» organization_id`              | string(uuid)                                                           | false    |              |                                                                                                                                                                                                                                                                                                                                  |
 | `»» owner_id`                     | string(uuid)                                                           | false    |              |                                                                                                                                                                                                                                                                                                                                  |
+| `»» size`                         | integer                                                                | false    |              |                                                                                                                                                                                                                                                                                                                                  |
 | `» has_unread`                    | boolean                                                                | false    |              | Has unread is true when assistant messages exist beyond the owner's read cursor, which updates on stream connect and disconnect.                                                                                                                                                                                                 |
 | `» id`                            | string(uuid)                                                           | false    |              |                                                                                                                                                                                                                                                                                                                                  |
 | `» labels`                        | object                                                                 | false    |              |                                                                                                                                                                                                                                                                                                                                  |
@@ -256,6 +263,7 @@ Status Code **200**
 | `»» result_delta`                 | string                                                                 | false    |              |                                                                                                                                                                                                                                                                                                                                  |
 | `»» result_reset`                 | boolean                                                                | false    |              |                                                                                                                                                                                                                                                                                                                                  |
 | `»» signature`                    | string                                                                 | false    |              |                                                                                                                                                                                                                                                                                                                                  |
+| `»» size`                         | integer                                                                | false    |              |                                                                                                                                                                                                                                                                                                                                  |
 | `»» skill_description`            | string                                                                 | false    |              | Skill description is the short description from the skill's SKILL.md frontmatter.                                                                                                                                                                                                                                                |
 | `»» skill_dir`                    | string                                                                 | false    |              | Skill dir is the absolute path to the skill directory inside the workspace filesystem. Internal only: used by read_skill/read_skill_file tools to locate skill files.                                                                                                                                                            |
 | `»» skill_name`                   | string                                                                 | false    |              | Skill name is the kebab-case name of a discovered skill from the workspace's .agents/skills/ directory.                                                                                                                                                                                                                          |
@@ -267,6 +275,10 @@ Status Code **200**
 | `»» tool_name`                    | string                                                                 | false    |              |                                                                                                                                                                                                                                                                                                                                  |
 | `»» type`                         | [codersdk.ChatMessagePartType](schemas.md#codersdkchatmessageparttype) | false    |              |                                                                                                                                                                                                                                                                                                                                  |
 | `»» url`                          | string                                                                 | false    |              |                                                                                                                                                                                                                                                                                                                                  |
+| `»» workspace_file_media_type`    | string                                                                 | false    |              | Workspace file media type is the best-effort detected MIME for the workspace upload. Falls back to application/octet-stream when the client cannot classify the file.                                                                                                                                                            |
+| `»» workspace_file_name`          | string                                                                 | false    |              | Workspace file name is the sanitized basename of a workspace file upload, used for chip labels and audit-friendly logs.                                                                                                                                                                                                          |
+| `»» workspace_file_path`          | string                                                                 | false    |              | Workspace file path is the absolute path of a file uploaded directly to the chat's workspace filesystem. The bytes live on the workspace, not in chat_files, so there is no FileID.                                                                                                                                              |
+| `»» workspace_file_size`          | integer                                                                | false    |              | Workspace file size is the byte size of a workspace file upload at the time of upload. Displayed in chips and used by the LLM-facing summary so the agent can plan downstream tooling (e.g. unzip vs. read_file).                                                                                                                |
 | `» last_model_config_id`          | string(uuid)                                                           | false    |              |                                                                                                                                                                                                                                                                                                                                  |
 | `» last_turn_summary`             | string                                                                 | false    |              |                                                                                                                                                                                                                                                                                                                                  |
 | `» mcp_server_ids`                | array                                                                  | false    |              |                                                                                                                                                                                                                                                                                                                                  |
@@ -286,13 +298,13 @@ Status Code **200**
 
 #### Enumerated Values
 
-| Property      | Value(s)                                                                                                     |
-|---------------|--------------------------------------------------------------------------------------------------------------|
-| `client_type` | `api`, `ui`                                                                                                  |
-| `kind`        | `auth`, `config`, `generic`, `overloaded`, `rate_limit`, `startup_timeout`, `timeout`, `usage_limit`         |
-| `type`        | `context-file`, `file`, `file-reference`, `reasoning`, `skill`, `source`, `text`, `tool-call`, `tool-result` |
-| `plan_mode`   | `plan`                                                                                                       |
-| `status`      | `completed`, `error`, `paused`, `pending`, `requires_action`, `running`, `waiting`                           |
+| Property      | Value(s)                                                                                                                                 |
+|---------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| `client_type` | `api`, `ui`                                                                                                                              |
+| `kind`        | `auth`, `config`, `generic`, `overloaded`, `rate_limit`, `startup_timeout`, `timeout`, `usage_limit`                                     |
+| `type`        | `context-file`, `file`, `file-reference`, `reasoning`, `skill`, `source`, `text`, `tool-call`, `tool-result`, `workspace-file-reference` |
+| `plan_mode`   | `plan`                                                                                                                                   |
+| `status`      | `completed`, `error`, `paused`, `pending`, `requires_action`, `running`, `waiting`                                                       |
 
 To perform this operation, you must be authenticated. [Learn more](authentication.md).
 
@@ -325,7 +337,11 @@ Experimental: this endpoint is subject to change.
       "file_name": "string",
       "start_line": 0,
       "text": "string",
-      "type": "text"
+      "type": "text",
+      "workspace_file_media_type": "string",
+      "workspace_file_name": "string",
+      "workspace_file_path": "string",
+      "workspace_file_size": 0
     }
   ],
   "labels": {
@@ -403,7 +419,8 @@ Experimental: this endpoint is subject to change.
           "mime_type": "string",
           "name": "string",
           "organization_id": "7c60d51f-b44e-4682-87d6-449835ea4de6",
-          "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05"
+          "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05",
+          "size": 0
         }
       ],
       "has_unread": true,
@@ -466,6 +483,7 @@ Experimental: this endpoint is subject to change.
           "result_delta": "string",
           "result_reset": true,
           "signature": "string",
+          "size": 0,
           "skill_description": "string",
           "skill_dir": "string",
           "skill_name": "string",
@@ -476,7 +494,11 @@ Experimental: this endpoint is subject to change.
           "tool_call_id": "string",
           "tool_name": "string",
           "type": "text",
-          "url": "string"
+          "url": "string",
+          "workspace_file_media_type": "string",
+          "workspace_file_name": "string",
+          "workspace_file_path": "string",
+          "workspace_file_size": 0
         }
       ],
       "last_model_config_id": "30ebb95f-c255-4759-9429-89aa4ec1554c",
@@ -531,7 +553,8 @@ Experimental: this endpoint is subject to change.
       "mime_type": "string",
       "name": "string",
       "organization_id": "7c60d51f-b44e-4682-87d6-449835ea4de6",
-      "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05"
+      "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05",
+      "size": 0
     }
   ],
   "has_unread": true,
@@ -594,6 +617,7 @@ Experimental: this endpoint is subject to change.
       "result_delta": "string",
       "result_reset": true,
       "signature": "string",
+      "size": 0,
       "skill_description": "string",
       "skill_dir": "string",
       "skill_name": "string",
@@ -604,7 +628,11 @@ Experimental: this endpoint is subject to change.
       "tool_call_id": "string",
       "tool_name": "string",
       "type": "text",
-      "url": "string"
+      "url": "string",
+      "workspace_file_media_type": "string",
+      "workspace_file_name": "string",
+      "workspace_file_path": "string",
+      "workspace_file_size": 0
     }
   ],
   "last_model_config_id": "30ebb95f-c255-4759-9429-89aa4ec1554c",
@@ -810,7 +838,8 @@ Experimental: this endpoint is subject to change.
         "mime_type": "string",
         "name": "string",
         "organization_id": "7c60d51f-b44e-4682-87d6-449835ea4de6",
-        "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05"
+        "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05",
+        "size": 0
       }
     ],
     "has_unread": true,
@@ -873,6 +902,7 @@ Experimental: this endpoint is subject to change.
         "result_delta": "string",
         "result_reset": true,
         "signature": "string",
+        "size": 0,
         "skill_description": "string",
         "skill_dir": "string",
         "skill_name": "string",
@@ -883,7 +913,11 @@ Experimental: this endpoint is subject to change.
         "tool_call_id": "string",
         "tool_name": "string",
         "type": "text",
-        "url": "string"
+        "url": "string",
+        "workspace_file_media_type": "string",
+        "workspace_file_name": "string",
+        "workspace_file_path": "string",
+        "workspace_file_size": 0
       }
     ],
     "last_model_config_id": "30ebb95f-c255-4759-9429-89aa4ec1554c",
@@ -992,7 +1026,8 @@ Experimental: this endpoint is subject to change.
           "mime_type": "string",
           "name": "string",
           "organization_id": "7c60d51f-b44e-4682-87d6-449835ea4de6",
-          "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05"
+          "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05",
+          "size": 0
         }
       ],
       "has_unread": true,
@@ -1055,6 +1090,7 @@ Experimental: this endpoint is subject to change.
           "result_delta": "string",
           "result_reset": true,
           "signature": "string",
+          "size": 0,
           "skill_description": "string",
           "skill_dir": "string",
           "skill_name": "string",
@@ -1065,7 +1101,11 @@ Experimental: this endpoint is subject to change.
           "tool_call_id": "string",
           "tool_name": "string",
           "type": "text",
-          "url": "string"
+          "url": "string",
+          "workspace_file_media_type": "string",
+          "workspace_file_name": "string",
+          "workspace_file_path": "string",
+          "workspace_file_size": 0
         }
       ],
       "last_model_config_id": "30ebb95f-c255-4759-9429-89aa4ec1554c",
@@ -1120,7 +1160,8 @@ Experimental: this endpoint is subject to change.
       "mime_type": "string",
       "name": "string",
       "organization_id": "7c60d51f-b44e-4682-87d6-449835ea4de6",
-      "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05"
+      "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05",
+      "size": 0
     }
   ],
   "has_unread": true,
@@ -1183,6 +1224,7 @@ Experimental: this endpoint is subject to change.
       "result_delta": "string",
       "result_reset": true,
       "signature": "string",
+      "size": 0,
       "skill_description": "string",
       "skill_dir": "string",
       "skill_name": "string",
@@ -1193,7 +1235,11 @@ Experimental: this endpoint is subject to change.
       "tool_call_id": "string",
       "tool_name": "string",
       "type": "text",
-      "url": "string"
+      "url": "string",
+      "workspace_file_media_type": "string",
+      "workspace_file_name": "string",
+      "workspace_file_path": "string",
+      "workspace_file_size": 0
     }
   ],
   "last_model_config_id": "30ebb95f-c255-4759-9429-89aa4ec1554c",
@@ -1383,7 +1429,8 @@ Experimental: this endpoint is subject to change.
           "mime_type": "string",
           "name": "string",
           "organization_id": "7c60d51f-b44e-4682-87d6-449835ea4de6",
-          "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05"
+          "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05",
+          "size": 0
         }
       ],
       "has_unread": true,
@@ -1446,6 +1493,7 @@ Experimental: this endpoint is subject to change.
           "result_delta": "string",
           "result_reset": true,
           "signature": "string",
+          "size": 0,
           "skill_description": "string",
           "skill_dir": "string",
           "skill_name": "string",
@@ -1456,7 +1504,11 @@ Experimental: this endpoint is subject to change.
           "tool_call_id": "string",
           "tool_name": "string",
           "type": "text",
-          "url": "string"
+          "url": "string",
+          "workspace_file_media_type": "string",
+          "workspace_file_name": "string",
+          "workspace_file_path": "string",
+          "workspace_file_size": 0
         }
       ],
       "last_model_config_id": "30ebb95f-c255-4759-9429-89aa4ec1554c",
@@ -1511,7 +1563,8 @@ Experimental: this endpoint is subject to change.
       "mime_type": "string",
       "name": "string",
       "organization_id": "7c60d51f-b44e-4682-87d6-449835ea4de6",
-      "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05"
+      "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05",
+      "size": 0
     }
   ],
   "has_unread": true,
@@ -1574,6 +1627,7 @@ Experimental: this endpoint is subject to change.
       "result_delta": "string",
       "result_reset": true,
       "signature": "string",
+      "size": 0,
       "skill_description": "string",
       "skill_dir": "string",
       "skill_name": "string",
@@ -1584,7 +1638,11 @@ Experimental: this endpoint is subject to change.
       "tool_call_id": "string",
       "tool_name": "string",
       "type": "text",
-      "url": "string"
+      "url": "string",
+      "workspace_file_media_type": "string",
+      "workspace_file_name": "string",
+      "workspace_file_path": "string",
+      "workspace_file_size": 0
     }
   ],
   "last_model_config_id": "30ebb95f-c255-4759-9429-89aa4ec1554c",
@@ -1698,6 +1756,7 @@ Experimental: this endpoint is subject to change.
           "result_delta": "string",
           "result_reset": true,
           "signature": "string",
+          "size": 0,
           "skill_description": "string",
           "skill_dir": "string",
           "skill_name": "string",
@@ -1708,7 +1767,11 @@ Experimental: this endpoint is subject to change.
           "tool_call_id": "string",
           "tool_name": "string",
           "type": "text",
-          "url": "string"
+          "url": "string",
+          "workspace_file_media_type": "string",
+          "workspace_file_name": "string",
+          "workspace_file_path": "string",
+          "workspace_file_size": 0
         }
       ],
       "created_at": "2019-08-24T14:15:22Z",
@@ -1776,6 +1839,7 @@ Experimental: this endpoint is subject to change.
           "result_delta": "string",
           "result_reset": true,
           "signature": "string",
+          "size": 0,
           "skill_description": "string",
           "skill_dir": "string",
           "skill_name": "string",
@@ -1786,7 +1850,11 @@ Experimental: this endpoint is subject to change.
           "tool_call_id": "string",
           "tool_name": "string",
           "type": "text",
-          "url": "string"
+          "url": "string",
+          "workspace_file_media_type": "string",
+          "workspace_file_name": "string",
+          "workspace_file_path": "string",
+          "workspace_file_size": 0
         }
       ],
       "created_at": "2019-08-24T14:15:22Z",
@@ -1834,7 +1902,11 @@ Experimental: this endpoint is subject to change.
       "file_name": "string",
       "start_line": 0,
       "text": "string",
-      "type": "text"
+      "type": "text",
+      "workspace_file_media_type": "string",
+      "workspace_file_name": "string",
+      "workspace_file_path": "string",
+      "workspace_file_size": 0
     }
   ],
   "mcp_server_ids": [
@@ -1906,6 +1978,7 @@ Experimental: this endpoint is subject to change.
         "result_delta": "string",
         "result_reset": true,
         "signature": "string",
+        "size": 0,
         "skill_description": "string",
         "skill_dir": "string",
         "skill_name": "string",
@@ -1916,7 +1989,11 @@ Experimental: this endpoint is subject to change.
         "tool_call_id": "string",
         "tool_name": "string",
         "type": "text",
-        "url": "string"
+        "url": "string",
+        "workspace_file_media_type": "string",
+        "workspace_file_name": "string",
+        "workspace_file_path": "string",
+        "workspace_file_size": 0
       }
     ],
     "created_at": "2019-08-24T14:15:22Z",
@@ -1983,6 +2060,7 @@ Experimental: this endpoint is subject to change.
         "result_delta": "string",
         "result_reset": true,
         "signature": "string",
+        "size": 0,
         "skill_description": "string",
         "skill_dir": "string",
         "skill_name": "string",
@@ -1993,7 +2071,11 @@ Experimental: this endpoint is subject to change.
         "tool_call_id": "string",
         "tool_name": "string",
         "type": "text",
-        "url": "string"
+        "url": "string",
+        "workspace_file_media_type": "string",
+        "workspace_file_name": "string",
+        "workspace_file_path": "string",
+        "workspace_file_size": 0
       }
     ],
     "created_at": "2019-08-24T14:15:22Z",
@@ -2042,7 +2124,11 @@ Experimental: this endpoint is subject to change.
       "file_name": "string",
       "start_line": 0,
       "text": "string",
-      "type": "text"
+      "type": "text",
+      "workspace_file_media_type": "string",
+      "workspace_file_name": "string",
+      "workspace_file_path": "string",
+      "workspace_file_size": 0
     }
   ],
   "model_config_id": "f5fb4d91-62ca-4377-9ee6-5d43ba00d205"
@@ -2111,6 +2197,7 @@ Experimental: this endpoint is subject to change.
         "result_delta": "string",
         "result_reset": true,
         "signature": "string",
+        "size": 0,
         "skill_description": "string",
         "skill_dir": "string",
         "skill_name": "string",
@@ -2121,7 +2208,11 @@ Experimental: this endpoint is subject to change.
         "tool_call_id": "string",
         "tool_name": "string",
         "type": "text",
-        "url": "string"
+        "url": "string",
+        "workspace_file_media_type": "string",
+        "workspace_file_name": "string",
+        "workspace_file_path": "string",
+        "workspace_file_size": 0
       }
     ],
     "created_at": "2019-08-24T14:15:22Z",
@@ -2297,6 +2388,7 @@ Experimental: this endpoint is subject to change.
         "result_delta": "string",
         "result_reset": true,
         "signature": "string",
+        "size": 0,
         "skill_description": "string",
         "skill_dir": "string",
         "skill_name": "string",
@@ -2307,7 +2399,11 @@ Experimental: this endpoint is subject to change.
         "tool_call_id": "string",
         "tool_name": "string",
         "type": "text",
-        "url": "string"
+        "url": "string",
+        "workspace_file_media_type": "string",
+        "workspace_file_name": "string",
+        "workspace_file_path": "string",
+        "workspace_file_size": 0
       }
     ],
     "created_at": "2019-08-24T14:15:22Z",
@@ -2371,6 +2467,7 @@ Experimental: this endpoint is subject to change.
       "result_delta": "string",
       "result_reset": true,
       "signature": "string",
+      "size": 0,
       "skill_description": "string",
       "skill_dir": "string",
       "skill_name": "string",
@@ -2381,7 +2478,11 @@ Experimental: this endpoint is subject to change.
       "tool_call_id": "string",
       "tool_name": "string",
       "type": "text",
-      "url": "string"
+      "url": "string",
+      "workspace_file_media_type": "string",
+      "workspace_file_name": "string",
+      "workspace_file_path": "string",
+      "workspace_file_size": 0
     },
     "role": "system"
   },
@@ -2434,6 +2535,7 @@ Experimental: this endpoint is subject to change.
           "result_delta": "string",
           "result_reset": true,
           "signature": "string",
+          "size": 0,
           "skill_description": "string",
           "skill_dir": "string",
           "skill_name": "string",
@@ -2444,7 +2546,11 @@ Experimental: this endpoint is subject to change.
           "tool_call_id": "string",
           "tool_name": "string",
           "type": "text",
-          "url": "string"
+          "url": "string",
+          "workspace_file_media_type": "string",
+          "workspace_file_name": "string",
+          "workspace_file_path": "string",
+          "workspace_file_size": 0
         }
       ],
       "created_at": "2019-08-24T14:15:22Z",
@@ -2621,7 +2727,8 @@ Experimental: this endpoint is subject to change.
           "mime_type": "string",
           "name": "string",
           "organization_id": "7c60d51f-b44e-4682-87d6-449835ea4de6",
-          "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05"
+          "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05",
+          "size": 0
         }
       ],
       "has_unread": true,
@@ -2684,6 +2791,7 @@ Experimental: this endpoint is subject to change.
           "result_delta": "string",
           "result_reset": true,
           "signature": "string",
+          "size": 0,
           "skill_description": "string",
           "skill_dir": "string",
           "skill_name": "string",
@@ -2694,7 +2802,11 @@ Experimental: this endpoint is subject to change.
           "tool_call_id": "string",
           "tool_name": "string",
           "type": "text",
-          "url": "string"
+          "url": "string",
+          "workspace_file_media_type": "string",
+          "workspace_file_name": "string",
+          "workspace_file_path": "string",
+          "workspace_file_size": 0
         }
       ],
       "last_model_config_id": "30ebb95f-c255-4759-9429-89aa4ec1554c",
@@ -2749,7 +2861,8 @@ Experimental: this endpoint is subject to change.
       "mime_type": "string",
       "name": "string",
       "organization_id": "7c60d51f-b44e-4682-87d6-449835ea4de6",
-      "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05"
+      "owner_id": "8826ee2e-7933-4665-aef2-2393f84a0d05",
+      "size": 0
     }
   ],
   "has_unread": true,
@@ -2812,6 +2925,7 @@ Experimental: this endpoint is subject to change.
       "result_delta": "string",
       "result_reset": true,
       "signature": "string",
+      "size": 0,
       "skill_description": "string",
       "skill_dir": "string",
       "skill_name": "string",
@@ -2822,7 +2936,11 @@ Experimental: this endpoint is subject to change.
       "tool_call_id": "string",
       "tool_name": "string",
       "type": "text",
-      "url": "string"
+      "url": "string",
+      "workspace_file_media_type": "string",
+      "workspace_file_name": "string",
+      "workspace_file_path": "string",
+      "workspace_file_size": 0
     }
   ],
   "last_model_config_id": "30ebb95f-c255-4759-9429-89aa4ec1554c",
@@ -2853,5 +2971,56 @@ Experimental: this endpoint is subject to change.
 | Status | Meaning                                                 | Description | Schema                                   |
 |--------|---------------------------------------------------------|-------------|------------------------------------------|
 | 200    | [OK](https://tools.ietf.org/html/rfc7231#section-6.3.1) | OK          | [codersdk.Chat](schemas.md#codersdkchat) |
+
+To perform this operation, you must be authenticated. [Learn more](authentication.md).
+
+## Upload a file to a chat's workspace
+
+### Code samples
+
+```shell
+# Example request using curl
+curl -X POST http://coder-server:8080/api/experimental/chats/{chat}/workspace-files \
+  -H 'Accept: application/json' \
+  -H 'Content-Type: string' \
+  -H 'Content-Disposition: string' \
+  -H 'Coder-Session-Token: API_KEY'
+```
+
+`POST /api/experimental/chats/{chat}/workspace-files`
+
+Experimental: this endpoint is subject to change.
+
+### Parameters
+
+| Name                  | In     | Type         | Required | Description                                     |
+|-----------------------|--------|--------------|----------|-------------------------------------------------|
+| `chat`                | path   | string(uuid) | true     | Chat ID                                         |
+| `Content-Type`        | header | string       | false    | Content type of the file                        |
+| `Content-Disposition` | header | string       | false    | Filename of the file (attachment; filename=...) |
+
+### Example responses
+
+> 201 Response
+
+```json
+{
+  "media_type": "string",
+  "name": "string",
+  "path": "string",
+  "size": 0
+}
+```
+
+### Responses
+
+| Status | Meaning                                                                    | Description           | Schema                                                                                         |
+|--------|----------------------------------------------------------------------------|-----------------------|------------------------------------------------------------------------------------------------|
+| 201    | [Created](https://tools.ietf.org/html/rfc7231#section-6.3.2)               | Created               | [codersdk.UploadChatWorkspaceFileResponse](schemas.md#codersdkuploadchatworkspacefileresponse) |
+| 400    | [Bad Request](https://tools.ietf.org/html/rfc7231#section-6.5.1)           | Bad Request           | [codersdk.Response](schemas.md#codersdkresponse)                                               |
+| 403    | [Forbidden](https://tools.ietf.org/html/rfc7231#section-6.5.3)             | Forbidden             | [codersdk.Response](schemas.md#codersdkresponse)                                               |
+| 409    | [Conflict](https://tools.ietf.org/html/rfc7231#section-6.5.8)              | Conflict              | [codersdk.Response](schemas.md#codersdkresponse)                                               |
+| 500    | [Internal Server Error](https://tools.ietf.org/html/rfc7231#section-6.6.1) | Internal Server Error | [codersdk.Response](schemas.md#codersdkresponse)                                               |
+| 502    | [Bad Gateway](https://tools.ietf.org/html/rfc7231#section-6.6.3)           | Bad Gateway           | [codersdk.Response](schemas.md#codersdkresponse)                                               |
 
 To perform this operation, you must be authenticated. [Learn more](authentication.md).

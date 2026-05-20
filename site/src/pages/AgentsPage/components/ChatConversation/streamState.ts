@@ -200,6 +200,7 @@ export const applyMessagePartToStreamState = (
 		// skill parts are metadata-only; no streaming render
 		// needed.
 		case "skill":
+		case "workspace-file-reference":
 			return prev;
 		default: {
 			const _exhaustive: never = part;
