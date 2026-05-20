@@ -67,12 +67,17 @@ install_env = { CGO_ENABLED = "1" }
 # never invoke `mise oci build`, so this block is inert for them.
 # `from` and `--tag` are passed via CLI per distro at build time.
 #
-# mount_point matches the path the base image reserves at
-# /opt/mise/data and exposes via MISE_SHARED_INSTALL_DIRS. The
-# `env` keys override mise oci's default MISE_DATA_DIR/MISE_CONFIG_DIR
-# baked into the image so the runtime keeps using the home volume.
+# mount_point matches the directory the base image reserves with
+# `install --directory --owner=coder /opt/mise/data`; mise oci writes
+# tool installs there and the base image's `MISE_SHARED_INSTALL_DIRS`
+# env exposes them at runtime.
+#
+# We do NOT set [oci].env — mise oci hard-overwrites MISE_DATA_DIR
+# and MISE_CONFIG_DIR to in-image paths regardless of [oci].env, and
+# every other env we care about (PATH, HOMEBREW_PREFIX, CARGO_HOME,
+# GOPRIVATE, MISE_TRUSTED_CONFIG_PATHS, MISE_SHARED_INSTALL_DIRS,
+# NODE_OPTIONS) is set by the base image and inherited by mise oci.
 [oci]
 mount_point = "/opt/mise/data"
 user = "coder"
 workdir = "/home/coder"
-env = { MISE_DATA_DIR = "/home/coder/.local/share/mise", MISE_TRUSTED_CONFIG_PATHS = "/home/coder/coder:/etc/mise", MISE_SHARED_INSTALL_DIRS = "/opt/mise/data/installs" }
